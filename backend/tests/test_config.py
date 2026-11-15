@@ -9,28 +9,6 @@ from app.core.config import (
     Settings,
 )
 
-ENV_KEYS = [
-    "MODEL_TIER",
-    "CPU_ONLY",
-    "LLM_PROVIDER",
-    "LLM_MODEL",
-    "LLM_NUM_CTX",
-    "OLLAMA_BASE_URL",
-    "OLLAMA_NUM_GPU",
-    "OLLAMA_KEEP_ALIVE",
-    "OPENAI_API_KEY",
-    "OPENAI_MODEL",
-    "OPENAI_BASE_URL",
-    "EMBEDDING_MODEL",
-    "EMBEDDING_DEVICE",
-]
-
-
-@pytest.fixture(autouse=True)
-def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key in ENV_KEYS:
-        monkeypatch.delenv(key, raising=False)
-
 
 def test_default_tier_is_small() -> None:
     s = Settings()
