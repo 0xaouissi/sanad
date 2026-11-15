@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.core.config import Settings
 from app.main import create_app
+from app.providers.llm import get_llm_provider
 from app.providers.llm.base import LLMError
 from app.providers.llm.ollama import OllamaProvider
 
@@ -33,11 +34,15 @@ async def live_client() -> AsyncIterator[AsyncClient]:
         pytest.skip(f"Live Ollama unavailable: {exc}")
     finally:
         await provider.aclose()
+    # Each test runs in its own event loop; the cached provider's httpx client
+    # must be rebuilt so it is not bound to a previous (closed) loop.
+    get_llm_provider.cache_clear()
     app = create_app()
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as test_client:
         yield test_client
+    get_llm_provider.cache_clear()
 
 
 @pytest.mark.parametrize(("lang", "question", "expected"), CASES)
