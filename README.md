@@ -12,7 +12,61 @@ bot answers **only** from the documents the company uploaded — with sources.
   React SPA dashboard (Vite) · one `docker compose up` command.
 - License: MIT.
 
-> Status: **Step 0 — hardware tiers**. Working project name; see the roadmap below.
+> Status: **Step 1 — FastAPI + Ollama chat with streaming**. Working project name.
+
+## Quick start (Docker, one command)
+
+```bash
+docker compose up -d
+```
+
+Starts the API (port 8000), PostgreSQL 16 + pgvector, Redis and Ollama. A
+one-shot `ollama-init` container pulls the model for your tier (first run
+downloads ~2 GB for the small tier). With an NVIDIA GPU:
+
+```bash
+docker compose -f docker-compose.yml -f deployment/docker-compose.gpu.yml up -d
+```
+
+Try it:
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/health/llm
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Bonjour, qui es-tu ?"}'
+```
+
+Streaming (server-sent events): add `"stream": true` to the same request.
+If Ollama is down or the model is missing, the API returns **503 with a
+message that tells you exactly what to run** (e.g. `ollama pull …`).
+
+## Native development (no Docker)
+
+1. Install [Ollama](https://ollama.com/download) and pull the small-tier model:
+   `ollama pull qwen2.5:3b-instruct-q4_K_M`
+2. Backend:
+
+```bash
+cd backend
+py -3.11 -m venv .venv                                # Python 3.11+
+.venv/Scripts/python.exe -m pip install -e ".[dev]"   # Windows
+# source .venv/bin/activate && pip install -e ".[dev]"  # Linux/macOS
+.venv/Scripts/python.exe -m uvicorn app.main:app --reload
+```
+
+Configuration: copy [.env.example](.env.example) to `backend/.env` (native)
+or `.env` (Docker). Every setting is documented there.
+
+## Tests and lint
+
+```bash
+cd backend
+.venv/Scripts/python.exe -m pytest -q        # unit tests (offline, mocked providers)
+.venv/Scripts/python.exe -m pytest -m e2e    # live E2E: ar/fr/en against real Ollama
+.venv/Scripts/python.exe -m ruff check app tests
+```
 
 ## Hardware tiers
 
@@ -32,45 +86,25 @@ MODEL_TIER=medium                          # pick a tier
 LLM_MODEL=qwen2.5:3b-instruct-q8_0         # or override name + quantization
 LLM_NUM_CTX=4096                           # or shrink context to save VRAM
 CPU_ONLY=true                              # force everything onto CPU
+LLM_PROVIDER=openai                        # optional API fallback (+ OPENAI_API_KEY)
 ```
 
 The 1.5B model is a last resort, never a default (weak Arabic). There is no
 benchmark script; answer quality per language is measured by the evaluation
 page (Step 6).
 
-## Development (Step 0)
-
-Requires Python 3.11+.
-
-```bash
-cd backend
-py -3.11 -m venv .venv                     # or: python3.11 -m venv .venv
-.venv/Scripts/python.exe -m pip install -e ".[dev]"   # Windows
-# source .venv/bin/activate && pip install -e ".[dev]"  # Linux/macOS
-.venv/Scripts/python.exe -m pytest -q
-```
-
-Configuration lives in [backend/app/core/config.py](backend/app/core/config.py);
-copy [.env.example](.env.example) to `backend/.env` to override defaults.
-
 ## Roadmap
 
-Each step ships with tests, a README/docs note and small commits.
+Each step ships with tests, docs and small commits.
 
 0. **Hardware tiers** — tier defaults, env overrides, CPU-only mode *(done)*
-1. Scaffold + Docker Compose skeleton (pgvector, Redis, Ollama, API, nginx; Vite SPA + widget shells)
-2. DB layer: models, Alembic migrations, pgvector, health endpoints
-3. Ingestion: parsing, **OCR** (ara/fra/eng), **Arabic text normalization**, chunking, BGE-M3 embeddings
-4. Retrieval: hybrid search + language detection (ar/fr/en)
-5. LLM providers (Ollama / OpenAI-compatible) + grounded generation + SSE chat API
-6. **Evaluation page**: golden Q&A sets, accuracy scores per language
-7. Redis caching, rate limiting, site keys + CORS allowlists
-8. Widget: one script tag, RTL, tiny bundle
-9. Dashboard (Vite React SPA): auth, **user roles**, documents, sites, settings, conversation logs
-10. **Website crawling** with scheduled re-sync
-11. **Human handoff** by email or Telegram
-12. **Privacy controls**: data retention, deletion, export
-13. **Metrics endpoints** + compose polish + end-to-end docs + full test pass
+1. **Project setup, FastAPI and Ollama** — health, structured logging, provider interface, streaming chat, Docker Compose *(done)*
+2. **Documents, chunking, multilingual embeddings** — multi-company isolation, PDF/DOCX/TXT/MD upload, OCR, Arabic normalization, pgvector, background ingestion
+3. **Retrieval, the "I don't know" rule, language detection** — hybrid search + rerank, citations, conversation memory, latency targets
+4. **The embeddable widget** — one script tag, Shadow DOM, RTL, themes, ratings
+5. **Protection, speed, admin dashboard** — rate limits, cache, prompt-injection defense, roles, privacy, metrics, migrations
+6. **Evaluation page, website crawling, human handoff** — per-language accuracy scores, scheduled re-sync, email/Telegram handoff
+7. **Documentation, demo and release** — demo GIF/video, CI, live demo, first release
 
 ## License
 
