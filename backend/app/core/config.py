@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import StrEnum
 from functools import lru_cache
 from typing import Literal
 
@@ -6,13 +6,13 @@ from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class ModelTier(str, Enum):
+class ModelTier(StrEnum):
     SMALL = "small"
     MEDIUM = "medium"
     LARGE = "large"
 
 
-class LLMProvider(str, Enum):
+class LLMProvider(StrEnum):
     OLLAMA = "ollama"
     OPENAI = "openai"
 
@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
+
+    app_name: str = "Sanad"
+    log_level: str = "INFO"
+    llm_timeout: float = Field(default=120.0, gt=0)
+
+    database_url: str = "postgresql+asyncpg://sanad:sanad@localhost:5432/sanad"
+    redis_url: str = "redis://localhost:6379/0"
 
     model_tier: ModelTier = ModelTier.SMALL
     cpu_only: bool = False

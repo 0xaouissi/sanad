@@ -4,12 +4,20 @@ version = "0.0.1"
 description = "Sanad backend: self-hosted, grounded RAG chatbot API (FastAPI)."
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "httpx>=0.27",
+    "structlog>=24.1",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.2"]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -20,3 +28,16 @@ packages = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-m 'not e2e'"
+markers = [
+    "e2e: live end-to-end tests requiring a running Ollama with the tier model pulled",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

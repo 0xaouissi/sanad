@@ -1,0 +1,1 @@
+"""Model providers: pluggable LLM and embedding backends."""
