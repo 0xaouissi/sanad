@@ -1,0 +1,86 @@
+name: sanad
+
+services:
+  api:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-sanad}:${POSTGRES_PASSWORD:-sanad}@db:5432/${POSTGRES_DB:-sanad}
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sanad}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sanad}
+      POSTGRES_DB: ${POSTGRES_DB:-sanad}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sanad} -d ${POSTGRES_DB:-sanad}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      MODEL_TIER: ${MODEL_TIER:-small}
+      LLM_MODEL: ${LLM_MODEL:-}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        MODEL="$$LLM_MODEL"
+        if [ -z "$$MODEL" ]; then
+          case "$$MODEL_TIER" in
+            medium) MODEL=qwen2.5:7b-instruct-q4_K_M ;;
+            large)  MODEL=qwen2.5:14b-instruct-q4_K_M ;;
+            *)      MODEL=qwen2.5:3b-instruct-q4_K_M ;;
+          esac
+        fi
+        echo "Pulling $$MODEL ..."
+        for i in 1 2 3 4 5; do
+          ollama pull "$$MODEL" && exit 0
+          sleep 3
+        done
+        echo "Failed to pull $$MODEL" >&2
+        exit 1
+    restart: "no"
+
+volumes:
+  pgdata:
+  ollama:
