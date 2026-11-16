@@ -1,9 +1,14 @@
+import uuid
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     stream: bool = False
+    conversation_id: uuid.UUID | None = None
+    language: Literal["ar", "fr", "en"] | None = None
 
     @field_validator("message")
     @classmethod
@@ -13,7 +18,19 @@ class ChatRequest(BaseModel):
         return value.strip()
 
 
+class Citation(BaseModel):
+    index: int
+    chunk_id: uuid.UUID
+    document_id: uuid.UUID
+    filename: str
+    page_number: int | None = None
+    heading: str | None = None
+
+
 class ChatResponse(BaseModel):
     answer: str
     model: str
     provider: str
+    language: str
+    conversation_id: uuid.UUID
+    citations: list[Citation]
