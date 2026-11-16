@@ -59,7 +59,7 @@ async def db_ready(monkeypatch: MonkeyPatch, tmp_path) -> AsyncIterator[None]:
     monkeypatch.setenv("ADMIN_API_KEY", ADMIN_KEY)
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     # FakeEmbedder's bag-of-words cosine scores are much lower than real BGE-M3
-    # similarities; the 0.55 default is calibrated for the real model (see e2e).
+    # similarities; the 0.43 default is calibrated for the real model (see e2e).
     monkeypatch.setenv("RETRIEVAL_MIN_SCORE", "0.1")
     monkeypatch.setenv(
         "DATABASE_URL",

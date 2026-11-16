@@ -131,7 +131,7 @@ def test_step3_retrieval_defaults() -> None:
     assert s.rerank_model == "BAAI/bge-reranker-v2-m3"
     assert s.rerank_candidates == 8
     assert s.retrieval_top_k == 5
-    assert s.retrieval_min_score == 0.55
+    assert s.retrieval_min_score == 0.43
     assert s.memory_max_turns == 6
 
 

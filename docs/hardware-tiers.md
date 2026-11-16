@@ -109,7 +109,7 @@ The E2E suite asserts the budget on the running tier.
 | `RERANK_MODEL` | `BAAI/bge-reranker-v2-m3` | Cross-encoder reranker |
 | `RERANK_CANDIDATES` | `8` | Hybrid candidates re-scored by the reranker |
 | `RETRIEVAL_TOP_K` | `5` | Chunks passed to the LLM as numbered sources |
-| `RETRIEVAL_MIN_SCORE` | `0.55` | Below this: localized "I don't know" |
+| `RETRIEVAL_MIN_SCORE` | `0.43` | Below this: localized "I don't know" |
 | `MEMORY_MAX_TURNS` | `6` | Past messages replayed per conversation (0 = off) |
 
 ## VRAM notes for the small tier (4 GB)

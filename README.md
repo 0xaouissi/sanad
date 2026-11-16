@@ -109,9 +109,11 @@ How it works:
   local cross-encoder (`bge-reranker-v2-m3`) re-ranks the top candidates;
   off by default on the small tier, override with `RERANK_ENABLED`.
 - **"I don't know" rule** — if the best source scores below
-  `RETRIEVAL_MIN_SCORE` (default 0.55), the LLM is never called: the visitor
-  gets a localized "I don't know" with an offer to contact support. The same
-  instruction is in the prompt for questions the sources cannot answer.
+  `RETRIEVAL_MIN_SCORE` (default 0.43, calibrated on real BGE-M3 scores), the
+  LLM is never called: the visitor gets a localized "I don't know" with an
+  offer to contact support. Questions that retrieve sources but cannot be
+  answered from them are refused by the same rule in the prompt. Refusals
+  never carry citations.
 - **Strict grounding** — the prompt forbids outside knowledge and requires
   inline `[n]` citations; the response maps them to document name + page.
 - **Conversation memory** — pass `conversation_id` back to continue a chat;

@@ -96,7 +96,10 @@ class Settings(BaseSettings):
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     rerank_candidates: int = Field(default=8, ge=1, le=50)
     retrieval_top_k: int = Field(default=5, ge=1, le=20)
-    retrieval_min_score: float = Field(default=0.55, ge=0.0, le=1.0)
+    # Calibrated on real BGE-M3 scores (tests/e2e/test_live_chat.py): in-scope
+    # queries score >= 0.45, off-topic <= 0.39. Near-misses above the threshold
+    # are refused by the LLM's grounding rule instead of by retrieval.
+    retrieval_min_score: float = Field(default=0.43, ge=0.0, le=1.0)
     memory_max_turns: int = Field(default=6, ge=0, le=50)
 
     @model_validator(mode="after")
