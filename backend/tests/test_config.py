@@ -83,3 +83,37 @@ def test_openai_provider_with_key() -> None:
 def test_embedding_device_override() -> None:
     assert Settings(embedding_device="cuda").resolved_embedding_device == "cuda"
     assert Settings().resolved_embedding_device == "auto"
+
+def test_step2_defaults() -> None:
+    s = Settings()
+    assert s.chunk_size == 1200
+    assert s.chunk_overlap == 200
+    assert s.max_upload_mb == 20
+    assert s.embedding_batch_size == 16
+    assert s.ocr_languages == "ara+fra+eng"
+    assert s.admin_api_key is None
+    assert s.tessdata_prefix is None
+
+
+def test_step2_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CHUNK_SIZE", "800")
+    monkeypatch.setenv("CHUNK_OVERLAP", "100")
+    monkeypatch.setenv("MAX_UPLOAD_MB", "50")
+    monkeypatch.setenv("ADMIN_API_KEY", "admin-secret")
+    monkeypatch.setenv("TESSERACT_CMD", "C:/tools/tesseract.exe")
+    s = Settings()
+    assert s.chunk_size == 800
+    assert s.chunk_overlap == 100
+    assert s.max_upload_mb == 50
+    assert s.admin_api_key == "admin-secret"
+    assert s.tesseract_cmd == "C:/tools/tesseract.exe"
+
+
+def test_overlap_must_be_smaller_than_size() -> None:
+    with pytest.raises(ValidationError, match="CHUNK_OVERLAP"):
+        Settings(chunk_size=500, chunk_overlap=500)
+
+
+def test_chunk_size_bounds() -> None:
+    with pytest.raises(ValidationError):
+        Settings(chunk_size=50)

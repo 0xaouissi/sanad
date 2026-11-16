@@ -10,6 +10,14 @@ dependencies = [
     "structlog>=24.1",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+    "pgvector>=0.3",
+    "python-multipart>=0.0.9",
+    "pypdf>=4.0",
+    "python-docx>=1.1",
+    "arabic-reshaper>=3.0",
+    "python-bidi>=0.6",
 ]
 
 [project.optional-dependencies]
@@ -17,6 +25,15 @@ dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
     "ruff>=0.6",
+]
+ocr = [
+    "pytesseract>=0.3.10",
+    "pypdfium2>=4.30",
+    "Pillow>=10.0",
+]
+embeddings = [
+    "FlagEmbedding>=1.3",
+    "huggingface_hub>=0.24",
 ]
 
 [build-system]
@@ -30,9 +47,10 @@ packages = ["app"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "-m 'not e2e'"
+addopts = "-m 'not e2e and not integration'"
 markers = [
     "e2e: live end-to-end tests requiring a running Ollama with the tier model pulled",
+    "integration: tests requiring PostgreSQL with pgvector and the BGE-M3 model downloaded",
 ]
 
 [tool.ruff]

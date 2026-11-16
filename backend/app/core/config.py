@@ -78,11 +78,27 @@ class Settings(BaseSettings):
 
     embedding_model: str = "BAAI/bge-m3"
     embedding_device: Literal["auto", "cpu", "cuda"] = "auto"
+    embedding_batch_size: int = Field(default=16, ge=1, le=256)
+
+    admin_api_key: str | None = None
+    data_dir: str = "./data"
+    max_upload_mb: int = Field(default=20, ge=1, le=200)
+    chunk_size: int = Field(default=1200, ge=200, le=8000)
+    chunk_overlap: int = Field(default=200, ge=0, le=2000)
+    tesseract_cmd: str = "tesseract"
+    tessdata_prefix: str | None = None
+    ocr_languages: str = "ara+fra+eng"
 
     @model_validator(mode="after")
     def _require_openai_key(self) -> "Settings":
         if self.llm_provider is LLMProvider.OPENAI and not self.openai_api_key:
             raise ValueError("LLM_PROVIDER=openai requires OPENAI_API_KEY")
+        return self
+
+    @model_validator(mode="after")
+    def _check_chunk_overlap(self) -> "Settings":
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE")
         return self
 
     @property

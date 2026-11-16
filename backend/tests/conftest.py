@@ -27,13 +27,24 @@ ENV_KEYS = [
     "OPENAI_BASE_URL",
     "EMBEDDING_MODEL",
     "EMBEDDING_DEVICE",
+    "EMBEDDING_BATCH_SIZE",
+    "ADMIN_API_KEY",
+    "DATA_DIR",
+    "MAX_UPLOAD_MB",
+    "CHUNK_SIZE",
+    "CHUNK_OVERLAP",
+    "TESSERACT_CMD",
+    "TESSDATA_PREFIX",
+    "OCR_LANGUAGES",
 ]
 
 
 @pytest.fixture(autouse=True)
-def clean_env(monkeypatch: MonkeyPatch) -> None:
+def clean_env(monkeypatch: MonkeyPatch, tmp_path) -> None:
     for key in ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
+    # Run from an empty cwd so the developer's backend/.env never leaks into tests.
+    monkeypatch.chdir(tmp_path)
 
 
 class FakeProvider(LLMProvider):
