@@ -29,6 +29,12 @@ class BgeM3Provider(EmbeddingProvider):
         return device
 
     def _load(self):
+        if self._settings.hf_home:
+            # Must be set before huggingface_hub is first imported: it freezes
+            # HF_HOME at import time. Lets .env drive the cache location.
+            import os
+
+            os.environ["HF_HOME"] = self._settings.hf_home
         try:
             from FlagEmbedding import BGEM3FlagModel
         except ImportError as exc:

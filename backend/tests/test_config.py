@@ -117,3 +117,9 @@ def test_overlap_must_be_smaller_than_size() -> None:
 def test_chunk_size_bounds() -> None:
     with pytest.raises(ValidationError):
         Settings(chunk_size=50)
+
+
+def test_hf_home_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert Settings().hf_home is None
+    monkeypatch.setenv("HF_HOME", "F:/sanad/models/hf")
+    assert Settings().hf_home == "F:/sanad/models/hf"

@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-m3"
     embedding_device: Literal["auto", "cpu", "cuda"] = "auto"
     embedding_batch_size: int = Field(default=16, ge=1, le=256)
+    hf_home: str | None = None
 
     admin_api_key: str | None = None
     data_dir: str = "./data"

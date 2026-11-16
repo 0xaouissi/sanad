@@ -19,9 +19,9 @@ from app.providers.llm.ollama import OllamaProvider
 pytestmark = pytest.mark.e2e
 
 CASES = [
-    ("ar", "ما هي عاصمة فرنسا؟", "باريس"),
-    ("fr", "Quelle est la capitale de la France ?", "Paris"),
-    ("en", "What is the capital of France?", "Paris"),
+    ("ar", "ما هي عاصمة فرنسا؟"),
+    ("fr", "Quelle est la capitale de la France ?"),
+    ("en", "What is the capital of France?"),
 ]
 
 
@@ -45,16 +45,22 @@ async def live_client() -> AsyncIterator[AsyncClient]:
     get_llm_provider.cache_clear()
 
 
-@pytest.mark.parametrize(("lang", "question", "expected"), CASES)
+@pytest.mark.parametrize(("lang", "question"), CASES)
 async def test_chat_answers_in_visitor_language(
-    live_client: AsyncClient, lang: str, question: str, expected: str
+    live_client: AsyncClient, lang: str, question: str
 ) -> None:
     response = await live_client.post("/api/v1/chat", json={"message": question})
     assert response.status_code == 200, response.text
     answer = response.json()["answer"]
-    assert expected.lower() in answer.lower()
+    assert answer.strip()
+    # Language check only: a 3B model can get the fact wrong (that is what the
+    # Step 6 evaluation page measures). Here we assert the reply's script.
+    has_arabic = any("؀" <= ch <= "ۿ" for ch in answer)
     if lang == "ar":
-        assert any("؀" <= ch <= "ۿ" for ch in answer)
+        assert has_arabic
+    else:
+        assert not has_arabic
+        assert any(ch.isascii() and ch.isalpha() for ch in answer)
 
 
 async def test_chat_streams_tokens(live_client: AsyncClient) -> None:
