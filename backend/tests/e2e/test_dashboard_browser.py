@@ -4,8 +4,9 @@ Runs against a live uvicorn subprocess (real BGE-M3 + PostgreSQL; no LLM is
 needed — the dashboard never chats). Covers login + session persistence,
 document upload and delete through the UI, confirm dialogs on destructive
 actions, viewer read-only access, Arabic RTL / French labels, the
-settings page (snippet, domains, key rotation), and the evaluation tab
-(golden counts per language, owner-only run button).
+settings page (snippet, domains, key rotation), the evaluation tab
+(golden counts per language, owner-only run button), and the website tab
+(crawl a local fixture site, crawled documents, delete, viewer read-only).
 
 Run: PLAYWRIGHT_BROWSERS_PATH=... pytest -m e2e (see README).
 """
@@ -15,7 +16,9 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from uuid import uuid4
 
@@ -64,6 +67,9 @@ def dashboard_server(tmp_path_factory):
             "RATE_LIMIT_PER_SITE": "0",
             "DAILY_CAP_PER_COMPANY": "0",
             "LOGIN_RATE_LIMIT_PER_MINUTE": "0",
+            # The crawl test targets a loopback fixture site.
+            "CRAWL_ALLOW_PRIVATE": "true",
+            "CRAWL_RESYNC_HOURS": "0",
         }
     )
     if _HF_HOME:
@@ -354,3 +360,120 @@ async def test_evaluation_tab_counts_and_owner_only_run(page, dashboard_server):
     await page.get_by_role("button", name="Evaluation", exact=True).click()
     await page.locator("#golden-languages").wait_for(state="visible")
     assert await page.locator("#run-eval").count() == 0
+
+
+@pytest.fixture
+def crawl_site():
+    pages = {
+        "/robots.txt": ("text/plain", "User-agent: *\nDisallow: /private\n"),
+        "/": (
+            "text/html",
+            "<html><head><title>Acme</title></head><body>"
+            '<a href="/refunds">Refunds</a> <a href="/shipping">Shipping</a> '
+            '<a href="/private/secret">Secret</a></body></html>',
+        ),
+        "/refunds": (
+            "text/html",
+            "<html><head><title>Refunds</title></head><body>"
+            "<p>Refunds are issued within 30 days of purchase.</p></body></html>",
+        ),
+        "/shipping": (
+            "text/html",
+            "<html><head><title>Shipping</title></head><body>"
+            "<p>Shipping takes 5 business days.</p></body></html>",
+        ),
+        "/private/secret": ("text/html", "<html><body><p>Never crawl me.</p></body></html>"),
+    }
+    requests: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def do_GET(self):
+            requests.append(self.path)
+            entry = pages.get(self.path)
+            if entry is None:
+                self.send_response(404)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            ctype, body = entry
+            data = body.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", f"{ctype}; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield {"url": f"http://127.0.0.1:{server.server_address[1]}/", "requests": requests}
+    server.shutdown()
+    server.server_close()
+    thread.join(timeout=5)
+
+
+async def test_website_tab_crawl_delete_and_viewer_read_only(
+    page, dashboard_server, crawl_site
+):
+    base = dashboard_server["base"]
+    account = await create_company_with_owner(dashboard_server)
+    await login(page, base, account["email"], OWNER_PASSWORD)
+
+    await page.get_by_role("button", name="Website", exact=True).click()
+    await page.get_by_text("No crawl sources yet").wait_for(state="visible")
+    await page.locator("#crawl-url").fill(crawl_site["url"])
+    await page.locator("#crawl-add").click()
+    row = page.locator("#crawl-sources tr", has_text=crawl_site["url"])
+    await row.wait_for(state="visible", timeout=15_000)
+    # Real BGE-M3 ingestion of the crawled pages runs in the background.
+    await row.locator(".badge.ready").wait_for(state="visible", timeout=180_000)
+    cells = row.locator("td")
+    assert await cells.nth(2).inner_text() == "3"
+    assert await cells.nth(3).inner_text() != "never"
+    assert "/private/secret" not in crawl_site["requests"]
+
+    # Crawled pages appear as documents.
+    await page.get_by_role("button", name="Documents", exact=True).click()
+    await page.locator("tr", has_text="refunds-").wait_for(state="visible")
+    await page.locator("tr", has_text="shipping-").wait_for(state="visible")
+    assert await page.locator("table .badge.ready").count() == 3
+
+    # A viewer sees the source but has no mutation controls.
+    me = await page.request.get(f"{base}/api/v1/auth/me")
+    csrf = (await me.json())["csrf_token"]
+    viewer_email = account["email"].replace("owner", "viewer", 1)
+    added = await page.request.post(
+        f"{base}/api/v1/dashboard/users",
+        data={"email": viewer_email, "password": VIEWER_PASSWORD},
+        headers={"X-CSRF-Token": csrf, "Content-Type": "application/json"},
+    )
+    assert added.status == 201, await added.text()
+    await page.get_by_role("button", name="Sign out").click()
+    await page.locator("#login-email").wait_for(state="visible")
+    await login(page, base, viewer_email, VIEWER_PASSWORD)
+    await page.get_by_role("button", name="Website", exact=True).click()
+    await page.locator("#crawl-sources").wait_for(state="visible")
+    assert await page.locator("#crawl-add").count() == 0
+    assert await page.get_by_role("button", name="Sync now").count() == 0
+    assert await page.get_by_role("button", name="Delete").count() == 0
+
+    # Owner deletes the source: crawled documents go with it.
+    await page.get_by_role("button", name="Sign out").click()
+    await page.locator("#login-email").wait_for(state="visible")
+    await login(page, base, account["email"], OWNER_PASSWORD)
+    await page.get_by_role("button", name="Website", exact=True).click()
+    await page.locator("#crawl-sources").wait_for(state="visible")
+    dialog = auto_dialog(page)
+    await page.get_by_role("button", name="Delete").click()
+    await page.wait_for_timeout(500)
+    assert await page.locator("#crawl-sources").count() == 1
+    dialog["accept"] = True
+    await page.get_by_role("button", name="Delete").click()
+    await page.get_by_text("No crawl sources yet").wait_for(state="visible")
+    await page.get_by_role("button", name="Documents", exact=True).click()
+    await page.get_by_text("No documents yet").wait_for(state="visible")
