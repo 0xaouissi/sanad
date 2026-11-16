@@ -12,6 +12,15 @@ bot answers **only** from the documents the company uploaded — with sources.
   React SPA dashboard (Vite) · one `docker compose up` command.
 - License: MIT.
 
+## Demo
+
+| Widget — trilingual answers, citations, RTL | Dashboard — documents, evaluation, settings |
+|---------------------------------------------|----------------------------------------------|
+| ![Widget demo](docs/demo-widget.gif) | ![Dashboard demo](docs/demo-dashboard.gif) |
+
+Run the demo yourself, or re-record these clips: [docs/demo.md](docs/demo.md).
+Put Sanad on a real server: [deployment/README.md](deployment/README.md).
+
 > Status: **Step 6c — human handoff**. Working project name.
 
 ## Quick start (Docker, one command)
