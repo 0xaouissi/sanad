@@ -19,13 +19,15 @@ def ocr_available() -> bool:
 
 
 def _tesseract_config(settings: Settings) -> str:
+    import os
+
     import pytesseract
 
     pytesseract.pytesseract.tesseract_cmd = settings.tesseract_cmd
-    config = ""
     if settings.tessdata_prefix:
-        config = f'--tessdata-dir "{settings.tessdata_prefix}"'
-    return config
+        # Env var, not --tessdata-dir: pytesseract keeps literal quotes on Windows.
+        os.environ["TESSDATA_PREFIX"] = settings.tessdata_prefix
+    return ""
 
 
 def ocr_image(image, settings: Settings) -> str:
