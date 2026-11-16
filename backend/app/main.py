@@ -9,8 +9,13 @@ from fastapi import FastAPI, Request, Response
 from app import __version__
 from app.api.health import router as health_router
 from app.api.v1.chat import router as chat_router
+from app.api.v1.companies import router as companies_router
+from app.api.v1.documents import router as documents_router
+from app.api.v1.search import router as search_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.db.session import dispose_db, init_db
+from app.providers.embeddings import get_embedding_provider
 from app.providers.llm import get_llm_provider
 
 log = structlog.get_logger()
@@ -18,8 +23,11 @@ log = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    await init_db()
     yield
     await get_llm_provider().aclose()
+    await get_embedding_provider().aclose()
+    await dispose_db()
 
 
 def create_app() -> FastAPI:
@@ -46,6 +54,9 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(chat_router, prefix="/api/v1")
+    app.include_router(companies_router, prefix="/api/v1")
+    app.include_router(documents_router, prefix="/api/v1")
+    app.include_router(search_router, prefix="/api/v1")
     return app
 
 
