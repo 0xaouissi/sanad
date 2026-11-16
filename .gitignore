@@ -22,6 +22,20 @@ dist/
 models/
 data/
 
+# Model weights and native binaries (never commit; keep them under models/)
+*.gguf
+*.safetensors
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.pkl
+*.dll
+*.exe
+*.so
+*.dylib
+
 # OS / editor
 .DS_Store
 Thumbs.db
