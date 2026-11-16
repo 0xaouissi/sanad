@@ -57,6 +57,37 @@ Model name and quantization are both part of the Ollama tag, so `LLM_MODEL`
 changes either. `LLM_NUM_CTX` overrides the tier's context size. Resolution
 order for every value: explicit env override → tier default.
 
+## Reranker per tier (Step 3)
+
+Hybrid retrieval (dense vectors + keyword full-text, fused with RRF) can be
+sharpened by a cross-encoder reranker, `BAAI/bge-reranker-v2-m3` (~2.3 GB).
+Default is tier-aware:
+
+| Tier | Reranker default | Why |
+|------|------------------|-----|
+| `small` | **off** | CPU reranking adds seconds; the small tier's 8 s first-token budget is better spent on the LLM |
+| `medium` / `large` | **on** | GPU reranking is fast and improves source ordering |
+
+Override either way with `RERANK_ENABLED=true|false`. When enabled, only the
+top `RERANK_CANDIDATES` (default 8) hybrid candidates are re-scored, bounding
+latency. First use downloads the weights into `HF_HOME`:
+
+```bash
+huggingface-cli download BAAI/bge-reranker-v2-m3
+```
+
+## Latency targets (Step 3)
+
+Time to first streamed token, measured and logged per request (`chat_latency`
+event with `first_token_ms`, `budget_ms`, `within_budget`):
+
+| Tier | First-token budget |
+|------|--------------------|
+| `small` | ≤ 8 s |
+| `medium` / `large` | ≤ 3 s |
+
+The E2E suite asserts the budget on the running tier.
+
 ## Environment reference
 
 | Variable | Default | Meaning |
@@ -74,6 +105,12 @@ order for every value: explicit env override → tier default.
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Any OpenAI-compatible endpoint |
 | `EMBEDDING_MODEL` | `BAAI/bge-m3` | Local multilingual embedding model |
 | `EMBEDDING_DEVICE` | `auto` | `auto` \| `cpu` \| `cuda`; `CPU_ONLY` forces `cpu` |
+| `RERANK_ENABLED` | tier default | `true` \| `false`; unset = off on small, on elsewhere |
+| `RERANK_MODEL` | `BAAI/bge-reranker-v2-m3` | Cross-encoder reranker |
+| `RERANK_CANDIDATES` | `8` | Hybrid candidates re-scored by the reranker |
+| `RETRIEVAL_TOP_K` | `5` | Chunks passed to the LLM as numbered sources |
+| `RETRIEVAL_MIN_SCORE` | `0.55` | Below this: localized "I don't know" |
+| `MEMORY_MAX_TURNS` | `6` | Past messages replayed per conversation (0 = off) |
 
 ## VRAM notes for the small tier (4 GB)
 

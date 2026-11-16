@@ -12,7 +12,7 @@ bot answers **only** from the documents the company uploaded — with sources.
   React SPA dashboard (Vite) · one `docker compose up` command.
 - License: MIT.
 
-> Status: **Step 2 — document ingestion + multilingual similarity search**. Working project name.
+> Status: **Step 3 — grounded answers, citations, "I don't know" rule**. Working project name.
 
 ## Quick start (Docker, one command)
 
@@ -33,12 +33,12 @@ Try it:
 ```bash
 curl http://localhost:8000/health
 curl http://localhost:8000/health/llm
-curl -X POST http://localhost:8000/api/v1/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Bonjour, qui es-tu ?"}'
+curl http://localhost:8000/health/db
 ```
 
-Streaming (server-sent events): add `"stream": true` to the same request.
+Chat answers **only from your uploaded documents** and needs a company API
+key — create a company, upload a policy file, then ask questions in Arabic,
+French or English: see [Grounded chat](#grounded-chat-step-3) below.
 If Ollama is down or the model is missing, the API returns **503 with a
 message that tells you exactly what to run** (e.g. `ollama pull …`).
 
@@ -86,6 +86,45 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -e ".[embeddings,ocr]"
 huggingface-cli download BAAI/bge-m3   # ~2.3 GB, cached under HF_HOME
 ```
+
+## Grounded chat (Step 3)
+
+`POST /api/v1/chat` answers **only from the company's documents**, in the
+visitor's language (Arabic, French or English — auto-detected, or forced with
+`"language": "ar"|"fr"|"en"`). Requires the company `X-API-Key`.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"message": "Combien de jours pour un remboursement ?"}'
+```
+
+Response: `answer`, `language`, `conversation_id`, `citations` (filename,
+page, heading, chunk id), `model`, `provider`.
+
+How it works:
+
+- **Hybrid retrieval** — dense BGE-M3 similarity + PostgreSQL full-text
+  keyword search, fused with reciprocal rank fusion. On medium/large tiers a
+  local cross-encoder (`bge-reranker-v2-m3`) re-ranks the top candidates;
+  off by default on the small tier, override with `RERANK_ENABLED`.
+- **"I don't know" rule** — if the best source scores below
+  `RETRIEVAL_MIN_SCORE` (default 0.55), the LLM is never called: the visitor
+  gets a localized "I don't know" with an offer to contact support. The same
+  instruction is in the prompt for questions the sources cannot answer.
+- **Strict grounding** — the prompt forbids outside knowledge and requires
+  inline `[n]` citations; the response maps them to document name + page.
+- **Conversation memory** — pass `conversation_id` back to continue a chat;
+  the last `MEMORY_MAX_TURNS` messages are replayed (and the previous turn
+  helps retrieval understand follow-ups like "and how long does it take?").
+- **Language retry** — if the model answers in the wrong language, it is
+  retried once with an explicit instruction (works for streaming too).
+- **Latency** — time to first streamed token is logged per request
+  (`chat_latency`) against the tier budget: ≤8 s small, ≤3 s medium/large.
+
+Streaming: add `"stream": true`. Server-sent events are `token` chunks, then
+a final `done` event carrying `conversation_id`, `language` and `citations`
+(or an `error` event with an actionable detail).
 
 ## Native development (no Docker)
 
@@ -136,7 +175,7 @@ The API creates its tables at startup and checks the setup at `GET /health/db`.
 cd backend
 .venv/Scripts/python.exe -m pytest -q                 # unit tests (offline, mocked providers)
 .venv/Scripts/python.exe -m pytest -m integration     # real PostgreSQL + pgvector (fake embeddings)
-.venv/Scripts/python.exe -m pytest -m e2e             # live: real Ollama + BGE-M3, ar/fr/en upload->search
+.venv/Scripts/python.exe -m pytest -m e2e             # live: real Ollama + BGE-M3, ar/fr/en grounded chat + refusal
 .venv/Scripts/python.exe -m ruff check app tests
 ```
 
@@ -177,7 +216,7 @@ Each step ships with tests, docs and small commits.
 0. **Hardware tiers** — tier defaults, env overrides, CPU-only mode *(done)*
 1. **Project setup, FastAPI and Ollama** — health, structured logging, provider interface, streaming chat, Docker Compose *(done)*
 2. **Documents, chunking, multilingual embeddings** — multi-company isolation, PDF/DOCX/TXT/MD upload, OCR, Arabic normalization, pgvector, background ingestion *(done)*
-3. **Retrieval, the "I don't know" rule, language detection** — hybrid search + rerank, citations, conversation memory, latency targets
+3. **Retrieval, the "I don't know" rule, language detection** — hybrid search + rerank, citations, conversation memory, latency targets *(done)*
 4. **The embeddable widget** — one script tag, Shadow DOM, RTL, themes, ratings
 5. **Protection, speed, admin dashboard** — rate limits, cache, prompt-injection defense, roles, privacy, metrics, migrations
 6. **Evaluation page, website crawling, human handoff** — per-language accuracy scores, scheduled re-sync, email/Telegram handoff
