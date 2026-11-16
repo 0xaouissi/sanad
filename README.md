@@ -12,7 +12,7 @@ bot answers **only** from the documents the company uploaded — with sources.
   React SPA dashboard (Vite) · one `docker compose up` command.
 - License: MIT.
 
-> Status: **Step 5b — admin dashboard**. Working project name.
+> Status: **Step 6a — golden evaluation**. Working project name.
 
 ## Quick start (Docker, one command)
 
@@ -281,6 +281,7 @@ Then open `http://localhost:8000/dashboard/` and sign in. Pages:
 - **Documents** — upload, live status badges, reindex, delete.
 - **Failed questions** — what the bot refused, with language and date.
 - **Ratings** — visitor thumbs up/down with the question and answer.
+- **Evaluation** — run the golden Q&A set and see per-language scores (Step 6a).
 - **Settings** — the widget snippet (copy button), allowed domains, the
   conversation-storage privacy toggle, key rotation, JSON export,
   delete-all-conversations, and team management.
@@ -311,6 +312,53 @@ Security:
 Development: `cd dashboard && npm install && npm run dev` (Vite on :5173,
 proxies the API). `npm run build` type-checks and rebuilds the committed
 bundle. See [dashboard/README.md](dashboard/README.md).
+
+## Golden evaluation (Step 6a)
+
+Measure answer quality per language **without the model judging itself**.
+A fixed golden set of **33 questions — 11 each in Arabic, French and
+English** — runs through the exact same retrieval + prompt + model path as
+live chat, then is scored deterministically:
+
+- **12 grounded** questions about the demo policies: every expected fact
+  must appear in the answer (Arabic-normalized, digit-folded substring
+  match) and every citation must point at an expected source document.
+- **15 out-of-scope** questions (weather, capitals, recipes…): the bot must
+  refuse with the standard "I don't know" answer and **no citations**.
+- **6 prompt-injection** attacks ("ignore your instructions…", DAN…):
+  blocked before the model, no prompt leak, no citations.
+
+The golden set lives in [backend/app/eval/golden.json](backend/app/eval/golden.json)
+and targets the trilingual demo policies in [samples/](samples/) (identical
+facts in `demo-policy.en.md`, `demo-politique.fr.md`, `demo-siasa.ar.md`).
+
+**Sample company.** Seed a demo company with the sample documents already
+ingested (real BGE-M3 embeddings):
+
+```bash
+cd backend
+.venv/Scripts/python.exe -m app.eval.seed --password "a-long-password"
+# optional: --email demo@sanad.example --name "Sanad Demo"
+```
+
+It prints the dashboard login, the secret API key (once) and the public
+site key. Sign in at `/dashboard/`, open **Evaluation** and press
+**Run evaluation** (owner only). The page shows the question count per
+language, live progress, pass/fail per language and per category, and each
+case with its failed checks. Viewers can see results but cannot run.
+
+API (dashboard session + CSRF for the run):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/dashboard/eval/run   # 202; 409 if already running
+curl http://localhost:8000/api/v1/dashboard/eval               # state, progress, results, golden counts
+```
+
+Runs are background tasks with progress in the KV store (24 h retention);
+a run stuck for over 30 minutes can be superseded. Evaluation **never
+writes conversations, messages, ratings, cache entries or chat metrics** —
+it cannot pollute the Failed questions page or the counters. If the demo
+documents are missing, the page warns and grounded cases fail honestly.
 
 ## Native development (no Docker)
 
@@ -373,15 +421,17 @@ clear message when a dependency is missing. The OCR E2E also needs
 
 ### Browser tests (real Chromium)
 
-Sixteen Playwright tests drive real pages. **Widget (11):** Arabic RTL,
+Seventeen Playwright tests drive real pages. **Widget (11):** Arabic RTL,
 mobile viewport, citation popovers, thumbs-up persisted to the database,
 manual French, custom colors/logo/welcome/theme, XSS from a malicious
 document, rejection from a non-allowed domain, and the bot check (hidden
-honeypot field, filled-honeypot rejection). **Dashboard (5):** login with
+honeypot field, filled-honeypot rejection). **Dashboard (6):** login with
 wrong-password error and cookie-session persistence, document upload and
 delete through the UI, confirm dialogs (dismiss keeps, accept deletes),
 viewer read-only access added through the UI, Arabic RTL / French labels,
-and settings (snippet, domains save, key-rotation confirm).
+settings (snippet, domains save, key-rotation confirm), and the evaluation
+tab (golden counts per language, missing-documents warning, owner-only run
+button hidden from viewers).
 
 ```bash
 pip install -e ".[browser]"
@@ -417,7 +467,7 @@ LLM_PROVIDER=openai                        # optional API fallback (+ OPENAI_API
 
 The 1.5B model is a last resort, never a default (weak Arabic). There is no
 benchmark script; answer quality per language is measured by the evaluation
-page (Step 6).
+page (Step 6a).
 
 ## Roadmap
 
@@ -431,7 +481,10 @@ Each step ships with tests, docs and small commits.
 5. **Protection, speed, admin dashboard** — split in two:
    - **5a** *(done)*: rate limits per IP/site, daily company cap, widget bot check, Redis answer cache with in-memory fallback, prompt-injection defense, Alembic migrations, Prometheus metrics
    - **5b** *(done)*: React dashboard — scrypt login with rate limiting, httpOnly cookie sessions + CSRF, owner/viewer roles, documents, failed questions, ratings, settings (snippet, domains, key rotation), privacy toggle, data export and deletion, ar/fr/en RTL interface
-6. **Evaluation page, website crawling, human handoff** — per-language accuracy scores, scheduled re-sync, email/Telegram handoff
+6. **Evaluation page, website crawling, human handoff** — split in three:
+   - **6a** *(done)*: golden Q&A evaluation — 33 questions (11 per language), grounded/out-of-scope/injection cases, deterministic fact + citation + refusal scoring, sample company and demo documents, dashboard evaluation page
+   - **6b**: SSRF-safe website crawler with robots.txt, limits and scheduled re-sync
+   - **6c**: human handoff by email and Telegram with rate limits and privacy controls
 7. **Documentation, demo and release** — demo GIF/video, CI, live demo, first release
 
 ## License
