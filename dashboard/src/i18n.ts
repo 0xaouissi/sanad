@@ -102,6 +102,19 @@ const en = {
   checkRefusal: "refusal",
   checkNoCitations: "no citations",
   checkNoPromptLeak: "no prompt leak",
+  website: "Website",
+  crawlHint:
+    "Crawl your public website into documents. Same domain only, robots.txt respected, private networks blocked. Pages re-sync automatically.",
+  crawlUrlPlaceholder: "https://example.com/policies",
+  addSource: "Add website",
+  noSources: "No crawl sources yet. Add your website's policy pages above.",
+  url: "URL",
+  pagesCrawled: "Pages",
+  lastSynced: "Last synced",
+  neverSynced: "never",
+  syncNow: "Sync now",
+  statusCrawling: "crawling",
+  confirmDeleteSource: "Delete this crawl source and all documents crawled from it?",
 };
 
 export type Dict = typeof en;
@@ -202,6 +215,19 @@ const fr: Dict = {
   checkRefusal: "refus",
   checkNoCitations: "sans citations",
   checkNoPromptLeak: "aucune fuite du prompt",
+  website: "Site web",
+  crawlHint:
+    "Explore votre site public pour en faire des documents. Même domaine uniquement, robots.txt respecté, réseaux privés bloqués. Les pages se resynchronisent automatiquement.",
+  crawlUrlPlaceholder: "https://example.com/politiques",
+  addSource: "Ajouter le site",
+  noSources: "Aucune source pour l'instant. Ajoutez les pages de politiques de votre site ci-dessus.",
+  url: "URL",
+  pagesCrawled: "Pages",
+  lastSynced: "Dernière synchro",
+  neverSynced: "jamais",
+  syncNow: "Synchroniser",
+  statusCrawling: "exploration",
+  confirmDeleteSource: "Supprimer cette source et tous les documents explorés depuis celle-ci ?",
 };
 
 const ar: Dict = {
@@ -299,6 +325,19 @@ const ar: Dict = {
   checkRefusal: "الرفض",
   checkNoCitations: "بلا استشهادات",
   checkNoPromptLeak: "لا تسريب للموجه",
+  website: "الموقع",
+  crawlHint:
+    "زحف موقعك العام وتحويله إلى وثائق. النطاق نفسه فقط، احترام robots.txt، حظر الشبكات الخاصة. تُزامن الصفحات تلقائيًا.",
+  crawlUrlPlaceholder: "https://example.com/policies",
+  addSource: "إضافة موقع",
+  noSources: "لا توجد مصادر زحف بعد. أضف صفحات السياسات في موقعك أعلاه.",
+  url: "الرابط",
+  pagesCrawled: "الصفحات",
+  lastSynced: "آخر مزامنة",
+  neverSynced: "أبدًا",
+  syncNow: "مزامنة الآن",
+  statusCrawling: "جارٍ الزحف",
+  confirmDeleteSource: "حذف مصدر الزحف هذا وكل الوثائق المستخرجة منه؟",
 };
 
 export const DICTS: Record<Lang, Dict> = { en, fr, ar };

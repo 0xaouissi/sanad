@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, Session, api, setCsrf } from "./api";
 import { DICTS, LANGS, Lang, initialLang } from "./i18n";
 import { Documents } from "./pages/Documents";
+import { Crawl } from "./pages/Crawl";
 import { Evaluation } from "./pages/Evaluation";
 import { Login } from "./pages/Login";
 import { Questions } from "./pages/Questions";
 import { Ratings } from "./pages/Ratings";
 import { SettingsPage } from "./pages/Settings";
 
-type Page = "documents" | "questions" | "ratings" | "evaluation" | "settings";
+type Page = "documents" | "website" | "questions" | "ratings" | "evaluation" | "settings";
 
 export function App() {
   const [lang, setLang] = useState<Lang>(initialLang);
@@ -72,6 +73,7 @@ export function App() {
   const isOwner = session.user.role === "owner";
   const tabs: { id: Page; label: string }[] = [
     { id: "documents", label: t.documents },
+    { id: "website", label: t.website },
     { id: "questions", label: t.questions },
     { id: "ratings", label: t.ratings },
     { id: "evaluation", label: t.evaluation },
@@ -112,6 +114,7 @@ export function App() {
         ))}
       </nav>
       {page === "documents" && <Documents t={t} isOwner={isOwner} onError={onError} />}
+      {page === "website" && <Crawl t={t} lang={lang} isOwner={isOwner} onError={onError} />}
       {page === "questions" && <Questions t={t} lang={lang} onError={onError} />}
       {page === "ratings" && <Ratings t={t} lang={lang} onError={onError} />}
       {page === "evaluation" && <Evaluation t={t} isOwner={isOwner} onError={onError} />}

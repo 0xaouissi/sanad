@@ -93,6 +93,17 @@ export interface EvalState {
   documents_ready: boolean;
 }
 
+export interface CrawlSource {
+  id: string;
+  url: string;
+  status: "pending" | "crawling" | "ready" | "failed";
+  error: string | null;
+  pages_crawled: number;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -155,4 +166,11 @@ export const api = {
     request<UserOut>("POST", "/api/v1/dashboard/users", { email, password }),
   evalState: () => request<EvalState>("GET", "/api/v1/dashboard/eval"),
   runEval: () => request<{ status: string }>("POST", "/api/v1/dashboard/eval/run"),
+  crawlSources: () => request<CrawlSource[]>("GET", "/api/v1/dashboard/crawl-sources"),
+  addCrawlSource: (url: string) =>
+    request<CrawlSource>("POST", "/api/v1/dashboard/crawl-sources", { url }),
+  syncCrawlSource: (id: string) =>
+    request<CrawlSource>("POST", `/api/v1/dashboard/crawl-sources/${id}/sync`),
+  deleteCrawlSource: (id: string) =>
+    request<null>("DELETE", `/api/v1/dashboard/crawl-sources/${id}`),
 };
