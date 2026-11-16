@@ -1,6 +1,8 @@
+from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -11,10 +13,15 @@ from app.core.security import (
     keys_match,
     origin_host,
 )
-from app.db.models import Company
+from app.db.models import Company, DashboardUser, UserRole
 from app.db.session import get_session
+from app.providers.kv import get_kv_store
+from app.providers.kv.base import KVStore
+from app.services.dashboard_session import COOKIE_NAME
+from app.services.dashboard_session import get_session as get_dashboard_session
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+KVDep = Annotated[KVStore, Depends(get_kv_store)]
 
 
 async def require_admin(
@@ -104,3 +111,66 @@ async def get_chat_company(
 
 
 ChatCompanyDep = Annotated[Company, Depends(get_chat_company)]
+
+
+@dataclass
+class DashboardAuth:
+    user: DashboardUser
+    company: Company
+    csrf: str
+    token: str
+
+
+async def require_dashboard_auth(
+    request: Request, session: SessionDep, kv: KVDep
+) -> DashboardAuth:
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        raise HTTPException(
+            status_code=401, detail="Not signed in. POST /api/v1/auth/login first."
+        )
+    try:
+        data = await get_dashboard_session(kv, token)
+    except (RedisError, OSError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Session backend unavailable ({exc}). Check REDIS_URL / the Redis service.",
+        ) from exc
+    if data is None:
+        raise HTTPException(status_code=401, detail="Session expired or invalid. Sign in again.")
+    user = await session.get(DashboardUser, data.user_id)
+    if user is None or user.company_id != data.company_id:
+        raise HTTPException(status_code=401, detail="Session expired or invalid. Sign in again.")
+    company = await session.get(Company, data.company_id)
+    if company is None:
+        raise HTTPException(status_code=401, detail="Session expired or invalid. Sign in again.")
+    return DashboardAuth(user=user, company=company, csrf=data.csrf, token=token)
+
+
+DashboardAuthDep = Annotated[DashboardAuth, Depends(require_dashboard_auth)]
+
+
+async def require_owner(auth: DashboardAuthDep) -> DashboardAuth:
+    if auth.user.role != UserRole.OWNER:
+        raise HTTPException(
+            status_code=403,
+            detail="This action requires the owner role. Viewers have read-only access.",
+        )
+    return auth
+
+
+OwnerDep = Annotated[DashboardAuth, Depends(require_owner)]
+
+
+async def require_csrf(
+    request: Request, auth: DashboardAuthDep, x_csrf_token: Annotated[str | None, Header()] = None
+) -> None:
+    if not x_csrf_token or not keys_match(x_csrf_token, auth.csrf):
+        raise HTTPException(
+            status_code=403,
+            detail="Missing or invalid CSRF token. Send the csrf_token from "
+            "GET /api/v1/auth/me in the X-CSRF-Token header.",
+        )
+
+
+CsrfDep = Annotated[None, Depends(require_csrf)]

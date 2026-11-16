@@ -1,9 +1,11 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException
+from sqlalchemy import select
 
 from app.api.deps import CompanyDep, SessionDep
 from app.core.config import get_settings
+from app.core.passwords import hash_password
 from app.core.security import (
     generate_api_key,
     generate_site_key,
@@ -11,7 +13,7 @@ from app.core.security import (
     keys_match,
     normalize_domains,
 )
-from app.db.models import Company
+from app.db.models import Company, DashboardUser, UserRole
 from app.schemas.company import CompanyCreate, CompanyCreated, DomainsResponse, DomainsUpdate
 
 router = APIRouter(prefix="/companies", tags=["companies"])
@@ -31,11 +33,29 @@ async def create_company(
         )
     if not keys_match(x_admin_key, admin_key):
         raise HTTPException(status_code=401, detail="Invalid admin key (X-Admin-Key).")
+    if body.owner_email is not None:
+        existing = await session.scalar(
+            select(DashboardUser).where(DashboardUser.email == body.owner_email)
+        )
+        if existing is not None:
+            raise HTTPException(
+                status_code=409, detail="owner_email already has an account."
+            )
     api_key = generate_api_key()
     company = Company(
         name=body.name, api_key_hash=hash_api_key(api_key), site_key=generate_site_key()
     )
     session.add(company)
+    await session.flush()
+    if body.owner_email is not None:
+        session.add(
+            DashboardUser(
+                company_id=company.id,
+                email=body.owner_email,
+                password_hash=hash_password(body.owner_password),
+                role=UserRole.OWNER,
+            )
+        )
     await session.commit()
     return CompanyCreated(
         id=company.id, name=company.name, api_key=api_key, site_key=company.site_key

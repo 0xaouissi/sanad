@@ -82,6 +82,14 @@ class Settings(BaseSettings):
     bot_check_enabled: bool = True
     bot_check_min_seconds: float = Field(default=2.0, ge=0)
 
+    # Dashboard (Step 5b). Sessions live in the KV store (Redis or memory)
+    # and are referenced by an httpOnly cookie; mutations need the session's
+    # CSRF token in X-CSRF-Token.
+    dashboard_session_hours: int = Field(default=12, ge=1)
+    login_rate_limit_per_minute: int = Field(default=10, ge=0)  # 0 disables
+    # Set true when the dashboard is served over HTTPS.
+    cookie_secure: bool = False
+
     model_tier: ModelTier = ModelTier.SMALL
     cpu_only: bool = False
 

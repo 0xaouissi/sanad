@@ -34,6 +34,30 @@ def _seconds_to_utc_midnight(now: datetime) -> int:
     return max(1, int((tomorrow - now).total_seconds()))
 
 
+async def enforce_login_limit(kv: KVStore, request: Request, settings: Settings) -> None:
+    limit = settings.login_rate_limit_per_minute
+    if limit <= 0:
+        return
+    now = time.time()
+    minute = int(now // 60)
+    retry_after = max(1, 60 - int(now % 60))
+    key = f"rl:login:{client_ip(request, settings)}:{minute}"
+    try:
+        count = await kv.incr(key, ttl_seconds=retry_after)
+    except (RedisError, OSError) as exc:
+        log.warning("rate_limit_backend_unavailable", detail=str(exc))
+        return
+    if count > limit:
+        metrics.inc("rate_limited_total")
+        log.info("rate_limited", key=key, count=count, limit=limit)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many login attempts: limit is {limit}/minute per IP. "
+            f"Retry in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
 async def enforce_chat_limits(
     kv: KVStore, request: Request, company_id: UUID, settings: Settings
 ) -> None:
