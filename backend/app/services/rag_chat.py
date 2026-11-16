@@ -62,8 +62,8 @@ class ConversationNotFoundError(Exception):
 class ChatOutcome:
     answer: str
     language: str
-    conversation_id: uuid.UUID
-    message_id: uuid.UUID
+    conversation_id: uuid.UUID | None
+    message_id: uuid.UUID | None
     citations: list[Citation]
 
 
@@ -176,6 +176,35 @@ async def _get_conversation(
     return conversation
 
 
+async def _conversation_and_history(
+    session: AsyncSession,
+    company: Company,
+    conversation_id: uuid.UUID | None,
+    settings: Settings,
+) -> tuple[Conversation | None, list[ChatMessage]]:
+    if not company.store_conversations:
+        if conversation_id is not None:
+            raise ConversationNotFoundError(
+                f"Conversation {conversation_id} not found for this company."
+            )
+        return None, []
+    conversation = await _get_conversation(session, company.id, conversation_id)
+    history = await _history(session, conversation.id, settings.memory_max_turns)
+    return conversation, history
+
+
+async def _persist_turn(
+    session: AsyncSession,
+    conversation: Conversation | None,
+    question: str,
+    answer: str,
+    language: str,
+) -> uuid.UUID | None:
+    if conversation is None:
+        return None
+    return await _save_turn(session, conversation, question, answer, language)
+
+
 async def _history(
     session: AsyncSession, conversation_id: uuid.UUID, max_messages: int
 ) -> list[ChatMessage]:
@@ -248,24 +277,28 @@ async def answer_question(
 ) -> ChatOutcome:
     started = time.perf_counter()
     language = language or detect_language(question)
-    conversation = await _get_conversation(session, company.id, conversation_id)
-    history = await _history(session, conversation.id, settings.memory_max_turns)
+    conversation, history = await _conversation_and_history(
+        session, company, conversation_id, settings
+    )
 
     # Only history-free first turns are cacheable: follow-ups depend on the
     # conversation, and the key must not mix companies or languages.
-    cache_eligible = kv is not None and settings.cache_enabled and not history
+    # Companies that opted out of storage are never cached either.
+    cache_eligible = (
+        kv is not None and settings.cache_enabled and company.store_conversations and not history
+    )
     if cache_eligible:
         cached = await get_cached_answer(kv, company.id, language, question)
         if cached is not None:
             log.info("chat_cache_hit", language=language)
             _count_chat(cached["answer"], language)
-            message_id = await _save_turn(
+            message_id = await _persist_turn(
                 session, conversation, question, cached["answer"], language
             )
             return ChatOutcome(
                 answer=cached["answer"],
                 language=language,
-                conversation_id=conversation.id,
+                conversation_id=conversation.id if conversation else None,
                 message_id=message_id,
                 citations=[Citation.model_validate(c) for c in cached["citations"]],
             )
@@ -321,11 +354,11 @@ async def answer_question(
             {"answer": answer, "citations": [c.model_dump(mode="json") for c in citations]},
         )
     _count_chat(answer, language)
-    message_id = await _save_turn(session, conversation, question, answer, language)
+    message_id = await _persist_turn(session, conversation, question, answer, language)
     return ChatOutcome(
         answer=answer,
         language=language,
-        conversation_id=conversation.id,
+        conversation_id=conversation.id if conversation else None,
         message_id=message_id,
         citations=citations,
     )
@@ -385,23 +418,26 @@ async def stream_answer(
 ) -> AsyncIterator[dict]:
     started = time.perf_counter()
     language = language or detect_language(question)
-    conversation = await _get_conversation(session, company.id, conversation_id)
-    history = await _history(session, conversation.id, settings.memory_max_turns)
+    conversation, history = await _conversation_and_history(
+        session, company, conversation_id, settings
+    )
 
-    cache_eligible = kv is not None and settings.cache_enabled and not history
+    cache_eligible = (
+        kv is not None and settings.cache_enabled and company.store_conversations and not history
+    )
     if cache_eligible:
         cached = await get_cached_answer(kv, company.id, language, question)
         if cached is not None:
             log.info("chat_cache_hit", language=language, mode="stream")
             _count_chat(cached["answer"], language)
             yield {"type": "token", "content": cached["answer"]}
-            message_id = await _save_turn(
+            message_id = await _persist_turn(
                 session, conversation, question, cached["answer"], language
             )
             yield {
                 "type": "done",
-                "conversation_id": str(conversation.id),
-                "message_id": str(message_id),
+                "conversation_id": str(conversation.id) if conversation else None,
+                "message_id": str(message_id) if message_id else None,
                 "language": language,
                 "citations": cached["citations"],
             }
@@ -439,8 +475,12 @@ async def stream_answer(
             answer = NO_ANSWER[language]
             citations = []
             _count_chat(answer, language)
-            message_id = await _save_turn(session, conversation, question, answer, language)
-            yield {"type": "error", "detail": answer, "message_id": str(message_id)}
+            message_id = await _persist_turn(session, conversation, question, answer, language)
+            yield {
+                "type": "error",
+                "detail": answer,
+                "message_id": str(message_id) if message_id else None,
+            }
             return
         if is_no_answer(answer, language):
             answer = NO_ANSWER[language]
@@ -468,11 +508,11 @@ async def stream_answer(
             {"answer": answer, "citations": [c.model_dump(mode="json") for c in citations]},
         )
     _count_chat(answer, language)
-    message_id = await _save_turn(session, conversation, question, answer, language)
+    message_id = await _persist_turn(session, conversation, question, answer, language)
     yield {
         "type": "done",
-        "conversation_id": str(conversation.id),
-        "message_id": str(message_id),
+        "conversation_id": str(conversation.id) if conversation else None,
+        "message_id": str(message_id) if message_id else None,
         "language": language,
         "citations": [citation.model_dump(mode="json") for citation in citations],
     }

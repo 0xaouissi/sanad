@@ -36,6 +36,7 @@ class ChatResponse(BaseModel):
     model: str
     provider: str
     language: str
-    conversation_id: uuid.UUID
-    message_id: uuid.UUID
+    # Null when the company disabled conversation storage (privacy control).
+    conversation_id: uuid.UUID | None = None
+    message_id: uuid.UUID | None = None
     citations: list[Citation]

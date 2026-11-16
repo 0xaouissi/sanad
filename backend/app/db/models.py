@@ -41,6 +41,9 @@ class Company(Base):
     # Public by design: embedded in customer pages, restricted by allowed_domains.
     site_key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     allowed_domains: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Privacy control: when false, chats are answered but never persisted
+    # (no conversation/message rows, no answer cache for this company).
+    store_conversations: Mapped[bool] = mapped_column(default=True, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     documents: Mapped[list["Document"]] = relationship(
