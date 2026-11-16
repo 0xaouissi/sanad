@@ -59,7 +59,28 @@ class Settings(BaseSettings):
     llm_timeout: float = Field(default=120.0, gt=0)
 
     database_url: str = "postgresql+asyncpg://sanad:sanad@localhost:5432/sanad"
-    redis_url: str = "redis://localhost:6379/0"
+    # Empty = in-memory cache/counters (single process). Set for shared state
+    # across workers; unreachable Redis falls back to memory with a warning.
+    redis_url: str = ""
+
+    # Answer cache (Step 5a). Keys include company id + language + question +
+    # a per-company document epoch, so answers never leak across companies
+    # and go stale when documents change.
+    cache_enabled: bool = True
+    cache_ttl_seconds: int = Field(default=3600, ge=1)
+
+    # Visitor abuse protection (Step 5a). 0 disables a limit.
+    rate_limit_per_ip: int = Field(default=30, ge=0)  # requests/minute
+    rate_limit_per_site: int = Field(default=120, ge=0)  # requests/minute/company
+    daily_cap_per_company: int = Field(default=1000, ge=0)  # chats/UTC day
+    # Behind a reverse proxy, count the first X-Forwarded-For entry instead of
+    # the proxy IP. Only enable when the proxy overwrites the header — clients
+    # can spoof it otherwise.
+    trust_forwarded_for: bool = False
+    # Widget bot deterrent: hidden honeypot field + minimum time between
+    # opening the panel and sending. Not a security boundary.
+    bot_check_enabled: bool = True
+    bot_check_min_seconds: float = Field(default=2.0, ge=0)
 
     model_tier: ModelTier = ModelTier.SMALL
     cpu_only: bool = False
