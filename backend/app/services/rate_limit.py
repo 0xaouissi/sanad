@@ -58,6 +58,24 @@ async def enforce_login_limit(kv: KVStore, request: Request, settings: Settings)
         )
 
 
+async def _enforce_checks(kv: KVStore, checks: list[tuple[str, int, int, str]]) -> None:
+    for key, limit, retry_after, label in checks:
+        try:
+            count = await kv.incr(key, ttl_seconds=retry_after)
+        except (RedisError, OSError) as exc:
+            log.warning("rate_limit_backend_unavailable", detail=str(exc))
+            return
+        if count > limit:
+            metrics.inc("rate_limited_total")
+            log.info("rate_limited", key=key, count=count, limit=limit)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many requests: limit is {label}. "
+                f"Retry in {retry_after} seconds.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
+
 async def enforce_chat_limits(
     kv: KVStore, request: Request, company_id: UUID, settings: Settings
 ) -> None:
@@ -93,18 +111,34 @@ async def enforce_chat_limits(
                 f"{settings.daily_cap_per_company} chats/day for this company",
             )
         )
-    for key, limit, retry_after, label in checks:
-        try:
-            count = await kv.incr(key, ttl_seconds=retry_after)
-        except (RedisError, OSError) as exc:
-            log.warning("rate_limit_backend_unavailable", detail=str(exc))
-            return
-        if count > limit:
-            metrics.inc("rate_limited_total")
-            log.info("rate_limited", key=key, count=count, limit=limit)
-            raise HTTPException(
-                status_code=429,
-                detail=f"Too many requests: limit is {label}. "
-                f"Retry in {retry_after} seconds.",
-                headers={"Retry-After": str(retry_after)},
+    await _enforce_checks(kv, checks)
+
+
+async def enforce_handoff_limits(
+    kv: KVStore, request: Request, company_id: UUID, settings: Settings
+) -> None:
+    now = time.time()
+    minute = int(now // 60)
+    minute_retry = max(1, 60 - int(now % 60))
+    checks: list[tuple[str, int, int, str]] = []
+    if settings.handoff_rate_limit_per_ip > 0:
+        checks.append(
+            (
+                f"rl:handoff-ip:{client_ip(request, settings)}:{minute}",
+                settings.handoff_rate_limit_per_ip,
+                minute_retry,
+                f"{settings.handoff_rate_limit_per_ip} handoff requests/minute per IP",
             )
+        )
+    if settings.handoff_daily_cap_per_company > 0:
+        utc_now = datetime.now(UTC)
+        checks.append(
+            (
+                f"rl:handoff-day:{company_id}:{utc_now:%Y-%m-%d}",
+                settings.handoff_daily_cap_per_company,
+                _seconds_to_utc_midnight(utc_now),
+                f"{settings.handoff_daily_cap_per_company} handoff requests/day "
+                "for this company",
+            )
+        )
+    await _enforce_checks(kv, checks)
