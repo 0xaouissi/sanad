@@ -28,6 +28,7 @@ def pytest_collection_modifyitems(config, items):
 # Captured at import time, before the autouse clean_env fixture strips them.
 _TESSERACT_CMD = os.environ.get("TESSERACT_CMD", "")
 _TESSDATA_PREFIX = os.environ.get("TESSDATA_PREFIX", "")
+_HF_HOME = os.environ.get("HF_HOME", "")
 
 
 @pytest.fixture
@@ -44,6 +45,9 @@ async def live_rag(monkeypatch: MonkeyPatch, tmp_path) -> AsyncIterator[AsyncCli
         monkeypatch.setenv("TESSERACT_CMD", _TESSERACT_CMD)
     if _TESSDATA_PREFIX:
         monkeypatch.setenv("TESSDATA_PREFIX", _TESSDATA_PREFIX)
+    if _HF_HOME:
+        # Must be in os.environ before huggingface_hub is first imported.
+        monkeypatch.setenv("HF_HOME", _HF_HOME)
     get_settings.cache_clear()
     get_embedding_provider.cache_clear()
     get_llm_provider.cache_clear()
