@@ -3,8 +3,9 @@
 Runs against a live uvicorn subprocess (real BGE-M3 + PostgreSQL; no LLM is
 needed — the dashboard never chats). Covers login + session persistence,
 document upload and delete through the UI, confirm dialogs on destructive
-actions, viewer read-only access, Arabic RTL / French labels, and the
-settings page (snippet, domains, key rotation).
+actions, viewer read-only access, Arabic RTL / French labels, the
+settings page (snippet, domains, key rotation), and the evaluation tab
+(golden counts per language, owner-only run button).
 
 Run: PLAYWRIGHT_BROWSERS_PATH=... pytest -m e2e (see README).
 """
@@ -320,3 +321,36 @@ async def test_settings_snippet_domains_and_rotation_confirm(page, dashboard_ser
         "key => document.getElementById('widget-snippet').textContent.includes(key)",
         arg=new_site_key,
     )
+
+
+async def test_evaluation_tab_counts_and_owner_only_run(page, dashboard_server):
+    base = dashboard_server["base"]
+    account = await create_company_with_owner(dashboard_server)
+    await login(page, base, account["email"], OWNER_PASSWORD)
+
+    await page.get_by_role("button", name="Evaluation", exact=True).click()
+    await page.locator("#golden-languages").wait_for(state="visible")
+    for code in ("en", "fr", "ar"):
+        row = page.locator("#golden-languages tr", has_text=code)
+        assert "11" in await row.inner_text()
+    await page.get_by_text("Demo documents missing").wait_for(state="visible")
+    await page.get_by_text("No evaluation yet").wait_for(state="visible")
+    assert await page.locator("#run-eval").count() == 1
+
+    # Add a viewer through the API (UI path is covered by its own test).
+    me = await page.request.get(f"{base}/api/v1/auth/me")
+    csrf = (await me.json())["csrf_token"]
+    viewer_email = account["email"].replace("owner", "viewer", 1)
+    added = await page.request.post(
+        f"{base}/api/v1/dashboard/users",
+        data={"email": viewer_email, "password": VIEWER_PASSWORD},
+        headers={"X-CSRF-Token": csrf, "Content-Type": "application/json"},
+    )
+    assert added.status == 201, await added.text()
+
+    await page.get_by_role("button", name="Sign out").click()
+    await page.locator("#login-email").wait_for(state="visible")
+    await login(page, base, viewer_email, VIEWER_PASSWORD)
+    await page.get_by_role("button", name="Evaluation", exact=True).click()
+    await page.locator("#golden-languages").wait_for(state="visible")
+    assert await page.locator("#run-eval").count() == 0
