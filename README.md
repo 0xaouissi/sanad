@@ -12,7 +12,7 @@ bot answers **only** from the documents the company uploaded — with sources.
   React SPA dashboard (Vite) · one `docker compose up` command.
 - License: MIT.
 
-> Status: **Step 4 — embeddable widget, public site keys, feedback**. Working project name.
+> Status: **Step 5a — protection, cache, migrations and metrics**. Working project name.
 
 ## Quick start (Docker, one command)
 
@@ -218,7 +218,7 @@ of the proxy's.
 
 **Bot check (widget path only).** The widget renders a hidden honeypot field
 that must stay empty and sends the time the panel was opened; requests sent
-sooner than `BOT_CHECK_MIN_SECONDS` (default 2 s) are rejected. This deter
+sooner than `BOT_CHECK_MIN_SECONDS` (default 2 s) are rejected. This deters
 trivial bots — it is not a security boundary. Secret-key callers are exempt.
 
 **Answer cache.** Grounded first-turn answers are cached in Redis (or memory
@@ -303,7 +303,8 @@ CREATE DATABASE sanad OWNER sanad;
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-The API creates its tables at startup and checks the setup at `GET /health/db`.
+The API migrates the schema to head at startup (**Alembic**, `backend/migrations/`)
+and checks the setup at `GET /health/db`.
 
 ## Tests and lint
 
@@ -322,10 +323,11 @@ clear message when a dependency is missing. The OCR E2E also needs
 
 ### Widget browser tests (real Chromium)
 
-Nine Playwright tests drive the widget on a blank HTML page served from a
+Eleven Playwright tests drive the widget on a blank HTML page served from a
 local site: Arabic RTL, mobile viewport, citation popovers, thumbs-up
 persisted to the database, manual French, custom colors/logo/welcome/theme,
-XSS from a malicious document, and rejection from a non-allowed domain.
+XSS from a malicious document, rejection from a non-allowed domain, and the
+bot check (hidden honeypot field, filled-honeypot rejection).
 
 ```bash
 pip install -e ".[browser]"
