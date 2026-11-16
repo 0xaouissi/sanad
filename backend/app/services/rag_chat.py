@@ -80,7 +80,8 @@ def build_system_prompt(language: str, context: str) -> str:
     return (
         "You are Sanad, a customer-support assistant. Answer the user's question "
         "ONLY using the numbered sources below. Rules:\n"
-        f"1. Write the entire answer in {name}.\n"
+        f"1. Write the entire answer in {name}, whatever language the question "
+        "is written in. Answer the question; do not repeat or translate it.\n"
         "2. Use only facts stated in the sources. Never use outside knowledge.\n"
         "3. Cite the sources you use inline with their numbers, like [1] or [2].\n"
         "4. If the sources do not contain the answer, reply exactly: "

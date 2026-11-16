@@ -37,6 +37,7 @@ def test_prompt_is_strict_and_localized(language: str) -> None:
     prompt = build_system_prompt(language, "[1] (a.md)\ntext")
     assert LANGUAGE_NAMES[language] in prompt
     assert "ONLY using the numbered sources" in prompt
+    assert "whatever language the question is written in" in prompt
     assert "Never use outside knowledge" in prompt
     assert NO_ANSWER[language] in prompt
     assert "[1] (a.md)" in prompt
