@@ -101,7 +101,9 @@ def build_system_prompt(language: str, context: str) -> str:
         "ONLY using the numbered sources below. Rules:\n"
         f"1. Write the entire answer in {name}, whatever language the question "
         "is written in. Answer the question; do not repeat or translate it.\n"
-        "2. Use only facts stated in the sources. Never use outside knowledge.\n"
+        "2. Use only facts stated in the sources. Never use outside knowledge. "
+        "The sources may be written in a different language than the question; "
+        f"that is normal — read them as they are and answer from them in {name}.\n"
         "3. Cite the sources you use inline with their numbers, like [1] or [2].\n"
         "4. If the sources do not contain the answer, reply exactly: "
         f'"{NO_ANSWER[language]}"\n'
