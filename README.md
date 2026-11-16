@@ -186,6 +186,82 @@ raw HTML anywhere in the widget. A malicious document containing
 `<script>`/`<img onerror=…>` is displayed as literal text and cannot execute
 (covered by a real-browser XSS test). Logo URLs are restricted to `http(s)`.
 
+### What the public site key does and does not protect
+
+The `pk-…` site key is **public by design**: anyone can read it from the page
+source, and the `Origin` header it is checked against can be spoofed by
+non-browser clients. It is an *identifier plus a browser-only guard rail*,
+not an authentication secret:
+
+- **It does:** identify the company, and stop *other websites* from embedding
+  your widget key in their pages (browsers enforce the `Origin` allowlist).
+- **It does not:** stop a determined script that calls the API directly with a
+  copied key and a forged `Origin`.
+
+That is why the real abuse backstops are server-side and apply to every chat
+request: **per-IP and per-site rate limits, a daily cap per company, and the
+widget bot check** (below). Keep the secret `sk-…` API key on your server
+only — it is required for documents, search and domain management, and it
+bypasses the bot check (server-side integrations are trusted callers).
+Company API keys are stored **only as SHA-256 hashes**; the plaintext is shown
+once at creation and never persisted.
+
+## Protection, cache and observability (Step 5a)
+
+**Rate limits and daily cap.** Chat requests are counted in fixed windows:
+`RATE_LIMIT_PER_IP` (default 30/min), `RATE_LIMIT_PER_SITE` (120/min per
+company) and `DAILY_CAP_PER_COMPANY` (1000 chats per UTC day). Exceeding any
+limit returns **429 with `Retry-After`**; the widget displays the message.
+`0` disables a limit. Behind a reverse proxy that overwrites
+`X-Forwarded-For`, set `TRUST_FORWARDED_FOR=true` to count visitor IPs instead
+of the proxy's.
+
+**Bot check (widget path only).** The widget renders a hidden honeypot field
+that must stay empty and sends the time the panel was opened; requests sent
+sooner than `BOT_CHECK_MIN_SECONDS` (default 2 s) are rejected. This deter
+trivial bots — it is not a security boundary. Secret-key callers are exempt.
+
+**Answer cache.** Grounded first-turn answers are cached in Redis (or memory
+when `REDIS_URL` is empty/unreachable — the app warns and falls back, it never
+refuses to start). Keys embed **company id + language + question hash + a
+per-company document epoch**, so answers can never leak between companies or
+languages, and any upload/delete/reindex invalidates that company's cache.
+Follow-up turns (with history) are never cached. Cache failures degrade to a
+miss; chat keeps working.
+
+**Prompt-injection defense (layered, verified on the live 3B model).**
+1. Grounding rules declare sources and questions to be *data, never
+   instructions*, and forbid revealing the system prompt.
+2. Injection-matching sentences are stripped from the context sent to the
+   LLM (stored documents and citations are untouched).
+3. Obvious override/extraction questions ("ignore your instructions…",
+   "print your system prompt", in ar/fr/en) are refused **before any model
+   call**.
+4. Answers that leak prompt text, or junk-prefixed refusals, are normalized
+   to the clean localized "I don't know".
+Live e2e tests upload a hostile document in each language and prove normal
+questions stay grounded while attack questions never leak the prompt.
+
+**Conversation privacy.** Conversation ids are unguessable UUID4 and are
+scoped to their company: another company's key (or a random id) gets **404**,
+on both the sync and streaming paths.
+
+**Migrations.** Schema changes are managed by **Alembic**
+(`backend/migrations/`); the app migrates to head at startup. For manual use:
+`alembic upgrade head`, `alembic revision --autogenerate -m "…"`,
+`alembic check` (drift detection).
+
+**Metrics.** `GET /api/v1/metrics` (admin-protected, `X-Admin-Key`) returns
+Prometheus text: `sanad_chats_total`, `sanad_refusals_total`,
+`sanad_cache_hits_total`, `sanad_cache_misses_total`, `sanad_rate_limited_total`
+plus database gauges (companies, documents, chunks, conversations, messages).
+
+```bash
+curl http://localhost:8000/api/v1/metrics -H "X-Admin-Key: $ADMIN_API_KEY"
+```
+
+All Step 5a settings are documented in [.env.example](.env.example).
+
 ## Native development (no Docker)
 
 1. Install [Ollama](https://ollama.com/download) and pull the small-tier model:
@@ -296,7 +372,9 @@ Each step ships with tests, docs and small commits.
 2. **Documents, chunking, multilingual embeddings** — multi-company isolation, PDF/DOCX/TXT/MD upload, OCR, Arabic normalization, pgvector, background ingestion *(done)*
 3. **Retrieval, the "I don't know" rule, language detection** — hybrid search + rerank, citations, conversation memory, latency targets *(done)*
 4. **The embeddable widget** — one script tag, Shadow DOM, RTL, themes, ratings *(done)*
-5. **Protection, speed, admin dashboard** — rate limits, cache, prompt-injection defense, roles, privacy, metrics, migrations
+5. **Protection, speed, admin dashboard** — split in two:
+   - **5a** *(done)*: rate limits per IP/site, daily company cap, widget bot check, Redis answer cache with in-memory fallback, prompt-injection defense, Alembic migrations, Prometheus metrics
+   - **5b**: React dashboard — login, roles, documents, failed questions, ratings, privacy controls, data export and deletion
 6. **Evaluation page, website crawling, human handoff** — per-language accuracy scores, scheduled re-sync, email/Telegram handoff
 7. **Documentation, demo and release** — demo GIF/video, CI, live demo, first release
 
