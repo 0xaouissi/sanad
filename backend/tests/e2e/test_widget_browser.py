@@ -94,6 +94,9 @@ def widget_server(tmp_path_factory):
             "RATE_LIMIT_PER_IP": "0",
             "RATE_LIMIT_PER_SITE": "0",
             "DAILY_CAP_PER_COMPANY": "0",
+            # Timing enforcement is covered by integration tests; the widget
+            # still sends opened_at and the honeypot stays active here.
+            "BOT_CHECK_MIN_SECONDS": "0",
         }
     )
     if _HF_HOME:
@@ -440,3 +443,29 @@ async def test_wrong_domain_shows_actionable_error(page, widget_server, blank_si
     text = await error.inner_text()
     assert "not allowed" in text
     assert "PUT /api/v1/companies/domains" in text
+
+async def test_honeypot_field_is_hidden_from_visitors(page, widget_server, blank_site):
+    site_dir, site_url, _ = blank_site
+    company = await setup_company(widget_server)
+    write_blank_page(site_dir, widget_server, company)
+    await _open_widget(page, site_url)
+    honeypot = page.locator(".sanad-website")
+    assert await honeypot.count() == 1
+    assert await honeypot.get_attribute("tabindex") == "-1"
+    assert await honeypot.get_attribute("aria-hidden") == "true"
+    box = await honeypot.bounding_box()
+    assert box is not None and box["x"] < -9000  # parked far off-screen
+
+
+async def test_filled_honeypot_shows_bot_check_error(page, widget_server, blank_site):
+    site_dir, site_url, _ = blank_site
+    company = await setup_company(widget_server)
+    write_blank_page(site_dir, widget_server, company)
+    await _open_widget(page, site_url)
+    await page.locator(".sanad-website").evaluate(
+        "el => { el.value = 'http://spam.example'; }"
+    )
+    await _ask(page, "How many days do I have to request a refund?")
+    error = page.locator(".sanad-bubble.sanad-error")
+    await error.wait_for(state="visible", timeout=30_000)
+    assert "Bot check failed" in await error.inner_text()

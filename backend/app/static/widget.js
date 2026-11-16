@@ -93,6 +93,7 @@
     manualLang: STRINGS[configuredLang] ? configuredLang : null,
     uiLang: STRINGS[configuredLang] ? configuredLang : browserLang(),
     welcomed: false,
+    openedAt: 0,
   };
 
   /* ---------- DOM helpers (no innerHTML anywhere) ---------- */
@@ -197,6 +198,7 @@ padding:8px 12px;background:var(--sanad-bg);color:var(--sanad-fg);font:inherit;o
 .sanad-send{width:36px;height:36px;flex:none;border-radius:50%;border:none;background:var(--sanad-accent);
 color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .sanad-send:disabled{opacity:.5;cursor:default;}
+.sanad-website{position:absolute;left:-9999px;width:1px;height:1px;opacity:0;}
 .sanad-root.sanad-mobile .sanad-panel{inset:0;width:100%;height:100%;max-width:none;max-height:none;border-radius:0;border:none;}
 .sanad-root.sanad-mobile[data-open="true"] .sanad-fab{display:none;}
 `;
@@ -266,6 +268,14 @@ color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center
   sendBtn.appendChild(icon(ICONS.send, 18));
   form.appendChild(input);
   form.appendChild(sendBtn);
+  // Honeypot: invisible to visitors, bots that auto-fill fields get rejected.
+  var honeypot = el("input", "sanad-website");
+  honeypot.type = "text";
+  honeypot.name = "website";
+  honeypot.tabIndex = -1;
+  honeypot.autocomplete = "off";
+  honeypot.setAttribute("aria-hidden", "true");
+  form.appendChild(honeypot);
   panel.appendChild(form);
 
   if (document.body) {
@@ -464,7 +474,7 @@ color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center
       input.focus();
     }
 
-    var payload = { message: text, stream: true };
+    var payload = { message: text, stream: true, website: honeypot.value, opened_at: state.openedAt };
     if (state.conversationId) payload.conversation_id = state.conversationId;
     if (state.manualLang) payload.language = state.manualLang;
 
@@ -546,6 +556,7 @@ color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center
     panel.hidden = !open;
     root.setAttribute("data-open", open ? "true" : "false");
     if (open) {
+      state.openedAt = Date.now();
       if (!state.welcomed) {
         state.welcomed = true;
         addMessage("bot", welcomeOverride || STRINGS[state.uiLang].welcome);

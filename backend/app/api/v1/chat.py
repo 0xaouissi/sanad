@@ -18,6 +18,7 @@ from app.providers.llm.base import LLMError, LLMProvider, LLMUnavailableError
 from app.providers.reranker import get_rerank_provider
 from app.providers.reranker.base import RerankError, RerankProvider
 from app.schemas.chat import ChatRequest, ChatResponse
+from app.services.bot_check import enforce_bot_check
 from app.services.rag_chat import ConversationNotFoundError, answer_question, stream_answer
 from app.services.rate_limit import enforce_chat_limits
 
@@ -52,6 +53,9 @@ async def chat(
     kv: KVDep,
 ) -> ChatResponse | StreamingResponse:
     settings = get_settings()
+    # Mirrors get_chat_company: the secret key wins when both are present.
+    via_site_key = "x-site-key" in raw_request.headers and "x-api-key" not in raw_request.headers
+    enforce_bot_check(request, via_site_key, settings)
     await enforce_chat_limits(kv, raw_request, company.id, settings)
     kwargs = {
         "embedder": embedder,

@@ -64,6 +64,9 @@ async def db_ready(monkeypatch: MonkeyPatch, tmp_path) -> AsyncIterator[None]:
     # FakeEmbedder's bag-of-words cosine scores are much lower than real BGE-M3
     # similarities; the 0.43 default is calibrated for the real model (see e2e).
     monkeypatch.setenv("RETRIEVAL_MIN_SCORE", "0.1")
+    # Bot deterrence has dedicated tests (test_bot_check.py); the auth and
+    # feedback suites exercise the site-key path without widget timing fields.
+    monkeypatch.setenv("BOT_CHECK_ENABLED", "false")
     monkeypatch.setenv(
         "DATABASE_URL",
         os.environ.get(

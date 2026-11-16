@@ -9,6 +9,10 @@ class ChatRequest(BaseModel):
     stream: bool = False
     conversation_id: uuid.UUID | None = None
     language: Literal["ar", "fr", "en"] | None = None
+    # Widget bot deterrent (site-key path only): hidden honeypot that must
+    # stay empty, and the epoch-ms time the visitor opened the panel.
+    website: str = ""
+    opened_at: float | None = None
 
     @field_validator("message")
     @classmethod
