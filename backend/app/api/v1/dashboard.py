@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
+from redis.exceptions import RedisError
 from sqlalchemy import delete, func, select
 
 from app.api.deps import CsrfDep, DashboardAuthDep, OwnerDep, SessionDep
@@ -13,7 +14,17 @@ from app.api.v1.documents import (
 )
 from app.core.passwords import hash_password
 from app.core.security import generate_api_key, generate_site_key, hash_api_key
-from app.db.models import Conversation, DashboardUser, Document, Feedback, Message, UserRole
+from app.db.models import (
+    Conversation,
+    DashboardUser,
+    Document,
+    DocumentStatus,
+    Feedback,
+    Message,
+    UserRole,
+)
+from app.eval.golden import golden_summary
+from app.providers.kv import get_kv_store
 from app.schemas.auth import UserCreate, UserResponse
 from app.schemas.dashboard import (
     DashboardSettings,
@@ -25,6 +36,7 @@ from app.schemas.dashboard import (
     SettingsUpdate,
 )
 from app.schemas.document import DocumentAccepted, DocumentOut
+from app.services.evaluation import get_eval_state, run_evaluation, start_eval
 from app.services.rag_chat import is_no_answer
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -303,3 +315,51 @@ async def delete_all_conversations(
     await session.execute(delete(Conversation).where(Conversation.company_id == auth.company.id))
     await session.commit()
     return DeletedCount(deleted=count or 0)
+
+
+# Evaluation (Step 6a): run the golden set against this company's documents.
+
+
+@router.post("/eval/run", status_code=202)
+async def run_eval(
+    auth: OwnerDep, background: BackgroundTasks, _: CsrfDep
+) -> dict:
+    kv = get_kv_store()
+    try:
+        claimed = await start_eval(kv, auth.company.id)
+    except (RedisError, OSError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Evaluation state unavailable ({exc}). Check REDIS_URL or restart the app.",
+        ) from exc
+    if not claimed:
+        raise HTTPException(
+            status_code=409, detail="An evaluation is already running. Wait for it to finish."
+        )
+    background.add_task(run_evaluation, auth.company.id)
+    return {"status": "running"}
+
+
+@router.get("/eval")
+async def eval_state(auth: DashboardAuthDep, session: SessionDep) -> dict:
+    try:
+        state = await get_eval_state(get_kv_store(), auth.company.id)
+    except (RedisError, OSError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Evaluation state unavailable ({exc}). Check REDIS_URL or restart the app.",
+        ) from exc
+    state = dict(state) if state else {"status": "idle"}
+    state["golden"] = golden_summary()
+    ready = set(
+        (
+            await session.scalars(
+                select(Document.filename).where(
+                    Document.company_id == auth.company.id,
+                    Document.status == DocumentStatus.READY,
+                )
+            )
+        ).all()
+    )
+    state["documents_ready"] = all(name in ready for name in golden_summary()["documents"])
+    return state
