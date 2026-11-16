@@ -23,7 +23,9 @@
     script.getAttribute("data-api-url") || new URL(script.src, location.href).origin
   ).replace(/\/+$/, "");
   var accent = script.getAttribute("data-color") || "#2563eb";
-  if (window.CSS && CSS.supports && !CSS.supports("color", accent)) accent = "#2563eb";
+  if (window.CSS && window.CSS.supports && !window.CSS.supports("color", accent)) {
+    accent = "#2563eb";
+  }
   var welcomeOverride = script.getAttribute("data-welcome") || "";
   var configuredLang = script.getAttribute("data-lang") || "auto";
   var configuredTheme = script.getAttribute("data-theme") || "auto";
@@ -140,7 +142,7 @@
 
   /* ---------- styles ---------- */
 
-  var CSS = `
+  var STYLES = `
 .sanad-root{--sanad-accent:#2563eb;--sanad-bg:#fff;--sanad-fg:#111827;--sanad-muted:#6b7280;
 --sanad-border:#e5e7eb;--sanad-bot-bg:#f3f4f6;--sanad-err-bg:#fef2f2;--sanad-err-fg:#b91c1c;
 font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic","Noto Naskh Arabic",sans-serif;
@@ -195,10 +197,8 @@ padding:8px 12px;background:var(--sanad-bg);color:var(--sanad-fg);font:inherit;o
 .sanad-send{width:36px;height:36px;flex:none;border-radius:50%;border:none;background:var(--sanad-accent);
 color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .sanad-send:disabled{opacity:.5;cursor:default;}
-@media (max-width:480px){
-.sanad-panel{inset:0;width:100%;height:100%;max-width:none;max-height:none;border-radius:0;border:none;}
-.sanad-root[data-open="true"] .sanad-fab{display:none;}
-}
+.sanad-root.sanad-mobile .sanad-panel{inset:0;width:100%;height:100%;max-width:none;max-height:none;border-radius:0;border:none;}
+.sanad-root.sanad-mobile[data-open="true"] .sanad-fab{display:none;}
 `;
 
   /* ---------- build UI ---------- */
@@ -207,7 +207,7 @@ color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center
   host.id = "sanad-widget-host";
   var shadow = host.attachShadow({ mode: "open" });
   var style = el("style");
-  style.textContent = CSS;
+  style.textContent = STYLES;
   shadow.appendChild(style);
 
   var root = el("div", "sanad-root");
@@ -277,6 +277,15 @@ color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center
   }
 
   /* ---------- theme ---------- */
+
+  // screen.width, not just innerWidth: pages without a viewport meta tag keep
+  // a 980px layout viewport on phones, which would defeat a CSS media query.
+  function applyMobileClass() {
+    var small = Math.min(screen.width || 9999, window.innerWidth) <= 480;
+    root.classList.toggle("sanad-mobile", small);
+  }
+  applyMobileClass();
+  window.addEventListener("resize", applyMobileClass);
 
   var darkQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
   function applyTheme() {
