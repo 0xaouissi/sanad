@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, Session, api, setCsrf } from "./api";
 import { DICTS, LANGS, Lang, initialLang } from "./i18n";
 import { Documents } from "./pages/Documents";
+import { Evaluation } from "./pages/Evaluation";
 import { Login } from "./pages/Login";
 import { Questions } from "./pages/Questions";
 import { Ratings } from "./pages/Ratings";
 import { SettingsPage } from "./pages/Settings";
 
-type Page = "documents" | "questions" | "ratings" | "settings";
+type Page = "documents" | "questions" | "ratings" | "evaluation" | "settings";
 
 export function App() {
   const [lang, setLang] = useState<Lang>(initialLang);
@@ -73,6 +74,7 @@ export function App() {
     { id: "documents", label: t.documents },
     { id: "questions", label: t.questions },
     { id: "ratings", label: t.ratings },
+    { id: "evaluation", label: t.evaluation },
     { id: "settings", label: t.settings },
   ];
 
@@ -112,6 +114,7 @@ export function App() {
       {page === "documents" && <Documents t={t} isOwner={isOwner} onError={onError} />}
       {page === "questions" && <Questions t={t} lang={lang} onError={onError} />}
       {page === "ratings" && <Ratings t={t} lang={lang} onError={onError} />}
+      {page === "evaluation" && <Evaluation t={t} isOwner={isOwner} onError={onError} />}
       {page === "settings" && <SettingsPage t={t} isOwner={isOwner} onError={onError} />}
     </div>
   );

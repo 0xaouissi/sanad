@@ -51,6 +51,48 @@ export interface UserOut {
   created_at: string;
 }
 
+export interface EvalCaseResult {
+  id: string;
+  language: string;
+  category: string;
+  question: string;
+  passed: boolean;
+  checks: Record<string, boolean>;
+  answer: string;
+  sources: string[];
+  duration_ms: number;
+}
+
+export interface EvalBucket {
+  total: number;
+  passed: number;
+}
+
+export interface EvalSummary {
+  total: number;
+  passed: number;
+  per_language: Record<string, EvalBucket>;
+  per_category: Record<string, EvalBucket>;
+}
+
+export interface EvalState {
+  status: "idle" | "running" | "done" | "failed";
+  started_at?: string;
+  finished_at?: string;
+  total?: number;
+  completed?: number;
+  results?: EvalCaseResult[];
+  summary?: EvalSummary;
+  error?: string;
+  golden: {
+    total: number;
+    per_language: Record<string, number>;
+    per_category: Record<string, number>;
+    documents: string[];
+  };
+  documents_ready: boolean;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -111,4 +153,6 @@ export const api = {
   users: () => request<UserOut[]>("GET", "/api/v1/dashboard/users"),
   addViewer: (email: string, password: string) =>
     request<UserOut>("POST", "/api/v1/dashboard/users", { email, password }),
+  evalState: () => request<EvalState>("GET", "/api/v1/dashboard/eval"),
+  runEval: () => request<{ status: string }>("POST", "/api/v1/dashboard/eval/run"),
 };
