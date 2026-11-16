@@ -39,6 +39,12 @@ class CrawlStatus(enum.StrEnum):
     FAILED = "failed"
 
 
+class ChannelStatus(enum.StrEnum):
+    SENT = "sent"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
 class Company(Base):
     __tablename__ = "companies"
 
@@ -51,6 +57,9 @@ class Company(Base):
     # Privacy control: when false, chats are answered but never persisted
     # (no conversation/message rows, no answer cache for this company).
     store_conversations: Mapped[bool] = mapped_column(default=True, server_default=text("true"))
+    # Human handoff destinations (Step 6c); NULL = that channel is not offered.
+    handoff_email: Mapped[str | None] = mapped_column(String(320), default=None)
+    telegram_chat_id: Mapped[str | None] = mapped_column(String(64), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     documents: Mapped[list["Document"]] = relationship(
@@ -170,6 +179,26 @@ class Feedback(Base):
         ForeignKey("messages.id", ondelete="CASCADE"), unique=True
     )
     rating: Mapped[str] = mapped_column(String(4))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class HandoffRequest(Base):
+    __tablename__ = "handoff_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True
+    )
+    email: Mapped[str] = mapped_column(String(320))
+    message: Mapped[str] = mapped_column(Text)
+    language: Mapped[str | None] = mapped_column(String(8), default=None)
+    email_status: Mapped[ChannelStatus] = mapped_column(
+        Enum(ChannelStatus, native_enum=False, length=20), default=ChannelStatus.SKIPPED
+    )
+    telegram_status: Mapped[ChannelStatus] = mapped_column(
+        Enum(ChannelStatus, native_enum=False, length=20), default=ChannelStatus.SKIPPED
+    )
+    error: Mapped[str | None] = mapped_column(Text, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

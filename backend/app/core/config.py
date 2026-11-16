@@ -104,6 +104,25 @@ class Settings(BaseSettings):
     crawl_allow_private: bool = False
     crawl_user_agent: str = "SanadBot/0.1 (self-hosted RAG indexer; respects robots.txt)"
 
+    # Human handoff (Step 6c). Server-level transports; secrets stay in the
+    # environment, never in code or the database. Companies pick destinations
+    # (support email / Telegram chat id) in dashboard Settings. An empty
+    # SMTP_HOST or TELEGRAM_BOT_TOKEN makes that channel unavailable.
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_starttls: bool = True
+    smtp_timeout_seconds: float = Field(default=15.0, gt=0)
+    telegram_bot_token: str = ""
+    # Override only for a proxy or a local test sink.
+    telegram_api_base: str = "https://api.telegram.org"
+    telegram_timeout_seconds: float = Field(default=15.0, gt=0)
+    # Handoff abuse limits. 0 disables a limit.
+    handoff_rate_limit_per_ip: int = Field(default=5, ge=0)  # requests/minute
+    handoff_daily_cap_per_company: int = Field(default=50, ge=0)  # requests/UTC day
+
     model_tier: ModelTier = ModelTier.SMALL
     cpu_only: bool = False
 
@@ -164,6 +183,15 @@ class Settings(BaseSettings):
     def _check_retrieval(self) -> "Settings":
         if self.rerank_candidates < self.retrieval_top_k:
             raise ValueError("RERANK_CANDIDATES must be >= RETRIEVAL_TOP_K")
+        return self
+
+    @model_validator(mode="after")
+    def _check_smtp(self) -> "Settings":
+        if self.smtp_host and not self.smtp_from:
+            raise ValueError(
+                "SMTP_HOST requires SMTP_FROM: the sender address for handoff "
+                "emails, e.g. sanad@yourdomain.com"
+            )
         return self
 
     @property

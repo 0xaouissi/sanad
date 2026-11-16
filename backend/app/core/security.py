@@ -75,3 +75,54 @@ def domain_allowed(host: str, domains: list[str]) -> bool:
         elif host == entry:
             return True
     return False
+
+
+# Header-injection guard: CR/LF/NUL and other control characters never belong
+# in an email address or a Telegram chat id, and would let a visitor smuggle
+# extra SMTP headers (Bcc:) or break the Telegram payload.
+def _has_control_chars(value: str) -> bool:
+    return any(ord(c) < 0x20 or ord(c) == 0x7F or c in "\u2028\u2029" for c in value)
+
+
+def clean_header_text(text: str) -> str:
+    return "".join(c for c in text if not _has_control_chars(c))
+
+
+# ASCII only: stdlib smtplib does not negotiate SMTPUTF8, so internationalized
+# addresses would bounce. Requires a dot in the domain (no "user@localhost").
+_HANDOFF_EMAIL_RE = re.compile(
+    r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+"
+    r"@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+"
+)
+
+
+def validate_handoff_email(email: str) -> str:
+    if _has_control_chars(email):
+        raise ValueError(
+            "email must not contain line breaks or control characters "
+            "(header-injection protection)"
+        )
+    value = email.strip()
+    if len(value) > 320 or len(value.split("@")[0]) > 64:
+        raise ValueError("email is too long: max 320 characters, 64 before the @")
+    if not _HANDOFF_EMAIL_RE.fullmatch(value):
+        raise ValueError("email must be a valid address like name@example.com")
+    return value
+
+
+_CHAT_ID_RE = re.compile(r"-?\d{1,20}|@[A-Za-z0-9_]{5,32}")
+
+
+def validate_chat_id(chat_id: str) -> str:
+    if _has_control_chars(chat_id):
+        raise ValueError(
+            "telegram_chat_id must not contain line breaks or control characters"
+        )
+    value = chat_id.strip()
+    if not _CHAT_ID_RE.fullmatch(value):
+        raise ValueError(
+            "telegram_chat_id must be a numeric chat id (e.g. 123456789 or "
+            "-1001234567890 for a group) or @channelusername"
+        )
+    return value
