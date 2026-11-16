@@ -1,12 +1,15 @@
 # Sanad dashboard
 
 Admin single-page app: **Vite + React + TypeScript**, no router or i18n
-libraries — five tabs, a small translation dictionary, ~55 kB gzipped.
+libraries — six tabs, a small translation dictionary, ~56 kB gzipped.
 
 - **Login** — email + password (scrypt-hashed server-side), httpOnly cookie
   session, CSRF token on every mutation, login rate limiting.
 - **Documents** — upload, status badges, reindex and delete (owner only,
   each behind a confirm dialog).
+- **Website** — add a URL to crawl into documents, live status badges,
+  pages crawled and last sync, sync-now and delete (owner only, delete
+  behind a confirm dialog). See the crawler section in the main README.
 - **Failed questions** — questions the bot refused, with language and date.
 - **Ratings** — visitor thumbs up/down with the question and answer.
 - **Evaluation** — run the 33-question golden set (11 per language) against

@@ -12,7 +12,7 @@ bot answers **only** from the documents the company uploaded — with sources.
   React SPA dashboard (Vite) · one `docker compose up` command.
 - License: MIT.
 
-> Status: **Step 6a — golden evaluation**. Working project name.
+> Status: **Step 6b — website crawler**. Working project name.
 
 ## Quick start (Docker, one command)
 
@@ -279,6 +279,7 @@ curl -X POST http://localhost:8000/api/v1/companies \
 Then open `http://localhost:8000/dashboard/` and sign in. Pages:
 
 - **Documents** — upload, live status badges, reindex, delete.
+- **Website** — crawl your site's policy pages into documents, sync, delete (Step 6b).
 - **Failed questions** — what the bot refused, with language and date.
 - **Ratings** — visitor thumbs up/down with the question and answer.
 - **Evaluation** — run the golden Q&A set and see per-language scores (Step 6a).
@@ -360,6 +361,58 @@ writes conversations, messages, ratings, cache entries or chat metrics** —
 it cannot pollute the Failed questions page or the counters. If the demo
 documents are missing, the page warns and grounded cases fail honestly.
 
+## Website crawler (Step 6b)
+
+Instead of uploading files, point Sanad at your website: it crawls the
+policy pages, turns each into a document, and keeps them fresh on a
+schedule. Sign in at `/dashboard/`, open **Website**, paste a URL and press
+**Add website**. Crawling and ingestion run in the background; the table
+shows status, pages crawled and last sync. **Sync now** re-crawls on demand;
+**Delete** removes the source and every document crawled from it.
+
+API (dashboard session; mutations also need `X-CSRF-Token`):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/dashboard/crawl-sources \
+  -H "Content-Type: application/json" -d '{"url": "https://acme.com/policies"}'  # 202
+curl http://localhost:8000/api/v1/dashboard/crawl-sources
+curl -X POST http://localhost:8000/api/v1/dashboard/crawl-sources/<id>/sync     # 202; 409 while crawling
+curl -X DELETE http://localhost:8000/api/v1/dashboard/crawl-sources/<id>        # 204
+```
+
+**SSRF protection** (on by default, no setting to weaken it in production):
+
+- `http`/`https` only; URLs with embedded credentials are rejected.
+- Every DNS answer is checked: if **any** resolves to a private, loopback,
+  link-local (incl. `169.254.169.254` cloud metadata), reserved, multicast
+  or CGNAT address, the crawl is refused. The connection then **pins the
+  validated IP** (with the original `Host` header and TLS SNI), so DNS
+  cannot rebind between check and connect.
+- Redirects are followed manually (max 5) and **every hop is re-validated**:
+  scheme, same domain, and IP ranges again.
+- Same domain only: `acme.com` and `www.acme.com` and subdomains of either;
+  look-alike domains (`acme.com.evil.com`) are rejected.
+- `robots.txt` is respected per URL. A missing file (404) allows crawling;
+  an unreachable or erroring one **fails the crawl conservatively**.
+- Limits: `CRAWL_MAX_PAGES` (20), `CRAWL_MAX_PAGE_BYTES` (2 MB per page),
+  `CRAWL_TIMEOUT_SECONDS` (15 per request), `CRAWL_MAX_SECONDS` (300 total).
+  Only HTML/XHTML/plain-text responses are accepted.
+
+**Injection defense:** crawled titles and text pass through the same
+sentence-level sanitizer as uploaded documents *before* storage, so
+"ignore your instructions…" payloads hidden in a page never reach the
+model or the vector index.
+
+**Safe re-sync:** `CRAWL_RESYNC_HOURS` (default 24, `0` disables) re-crawls
+due sources in a background loop. Unchanged pages are kept as-is; a changed
+page's old document is deleted **only after** its replacement ingests
+successfully; pages that disappeared are removed. If a crawl fails —
+network, robots, everything — the previous documents stay untouched.
+
+All settings are documented in [.env.example](.env.example).
+`CRAWL_ALLOW_PRIVATE=true` exists **only** so tests and local development
+can crawl a loopback fixture site; never enable it on a reachable server.
+
 ## Native development (no Docker)
 
 1. Install [Ollama](https://ollama.com/download) and pull the small-tier model:
@@ -410,7 +463,7 @@ and checks the setup at `GET /health/db`.
 cd backend
 .venv/Scripts/python.exe -m pytest -q                 # unit tests (offline, mocked providers)
 .venv/Scripts/python.exe -m pytest -m integration     # real PostgreSQL + pgvector (fake embeddings)
-.venv/Scripts/python.exe -m pytest -m e2e             # live: real Ollama + BGE-M3, ar/fr/en grounded chat + refusal
+.venv/Scripts/python.exe -m pytest -m e2e             # live: real Ollama + BGE-M3, ar/fr/en chat + refusal + crawl→chat
 .venv/Scripts/python.exe -m ruff check app tests
 ```
 
@@ -421,17 +474,19 @@ clear message when a dependency is missing. The OCR E2E also needs
 
 ### Browser tests (real Chromium)
 
-Seventeen Playwright tests drive real pages. **Widget (11):** Arabic RTL,
+Eighteen Playwright tests drive real pages. **Widget (11):** Arabic RTL,
 mobile viewport, citation popovers, thumbs-up persisted to the database,
 manual French, custom colors/logo/welcome/theme, XSS from a malicious
 document, rejection from a non-allowed domain, and the bot check (hidden
-honeypot field, filled-honeypot rejection). **Dashboard (6):** login with
+honeypot field, filled-honeypot rejection). **Dashboard (7):** login with
 wrong-password error and cookie-session persistence, document upload and
 delete through the UI, confirm dialogs (dismiss keeps, accept deletes),
 viewer read-only access added through the UI, Arabic RTL / French labels,
-settings (snippet, domains save, key-rotation confirm), and the evaluation
+settings (snippet, domains save, key-rotation confirm), the evaluation
 tab (golden counts per language, missing-documents warning, owner-only run
-button hidden from viewers).
+button hidden from viewers), and the website tab (crawl a local fixture
+site with real embeddings, robots-blocked page never fetched, crawled
+documents appear and are deleted with the source, viewer read-only).
 
 ```bash
 pip install -e ".[browser]"
@@ -483,7 +538,7 @@ Each step ships with tests, docs and small commits.
    - **5b** *(done)*: React dashboard — scrypt login with rate limiting, httpOnly cookie sessions + CSRF, owner/viewer roles, documents, failed questions, ratings, settings (snippet, domains, key rotation), privacy toggle, data export and deletion, ar/fr/en RTL interface
 6. **Evaluation page, website crawling, human handoff** — split in three:
    - **6a** *(done)*: golden Q&A evaluation — 33 questions (11 per language), grounded/out-of-scope/injection cases, deterministic fact + citation + refusal scoring, sample company and demo documents, dashboard evaluation page
-   - **6b**: SSRF-safe website crawler with robots.txt, limits and scheduled re-sync
+   - **6b** *(done)*: SSRF-safe website crawler — IP-pinned connections, per-hop redirect re-validation, same-domain + robots.txt, page/size/time limits, injection-sanitized storage, safe scheduled re-sync, dashboard Website tab
    - **6c**: human handoff by email and Telegram with rate limits and privacy controls
 7. **Documentation, demo and release** — demo GIF/video, CI, live demo, first release
 
