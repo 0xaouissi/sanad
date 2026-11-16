@@ -2,7 +2,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from app.providers.reranker import get_rerank_provider
 from app.providers.reranker.base import RerankError, RerankProvider
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.rag_chat import ConversationNotFoundError, answer_question, stream_answer
+from app.services.rate_limit import enforce_chat_limits
 
 router = APIRouter(tags=["chat"])
 
@@ -42,6 +43,7 @@ async def _sse(
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
+    raw_request: Request,
     company: ChatCompanyDep,
     session: SessionDep,
     embedder: EmbedderDep,
@@ -49,10 +51,12 @@ async def chat(
     llm: LLMDep,
     kv: KVDep,
 ) -> ChatResponse | StreamingResponse:
+    settings = get_settings()
+    await enforce_chat_limits(kv, raw_request, company.id, settings)
     kwargs = {
         "embedder": embedder,
         "llm": llm,
-        "settings": get_settings(),
+        "settings": settings,
         "reranker": reranker,
         "conversation_id": request.conversation_id,
         "language": request.language,

@@ -10,10 +10,13 @@ from httpx import ASGITransport, AsyncClient
 from pytest import MonkeyPatch
 from sqlalchemy import text
 
+from app.core import metrics
 from app.core.config import get_settings
 from app.db.session import dispose_db, get_session_factory, init_db
 from app.main import create_app
 from app.providers.embeddings import get_embedding_provider
+from app.providers.kv import set_kv_store
+from app.providers.kv.memory import MemoryKVStore
 from app.providers.llm import get_llm_provider
 from app.providers.reranker import get_rerank_provider
 
@@ -74,12 +77,17 @@ async def live_rag(monkeypatch: MonkeyPatch, tmp_path) -> AsyncIterator[AsyncCli
         await session.execute(text("TRUNCATE companies CASCADE"))
         await session.commit()
 
+    # Fresh counters/cache per test so rate limits never leak across tests.
+    set_kv_store(MemoryKVStore())
+    metrics.reset()
+
     app = create_app()
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test", timeout=300.0
     ) as client:
         yield client
 
+    set_kv_store(None)
     await get_embedding_provider().aclose()
     await dispose_db()
     get_settings.cache_clear()

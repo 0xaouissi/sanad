@@ -90,6 +90,10 @@ def widget_server(tmp_path_factory):
             "DATABASE_URL": _DATABASE_URL,
             "DATA_DIR": str(tmp_path_factory.mktemp("widget-data")),
             "PYTHONIOENCODING": "utf-8",
+            # Limits are covered by dedicated tests; keep browser runs deterministic.
+            "RATE_LIMIT_PER_IP": "0",
+            "RATE_LIMIT_PER_SITE": "0",
+            "DAILY_CAP_PER_COMPANY": "0",
         }
     )
     if _HF_HOME:
