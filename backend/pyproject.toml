@@ -1,6 +1,6 @@
 [project]
 name = "sanad-backend"
-version = "0.0.1"
+version = "0.1.0"
 description = "Sanad backend: self-hosted, grounded RAG chatbot API (FastAPI)."
 requires-python = ">=3.11"
 dependencies = [

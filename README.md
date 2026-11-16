@@ -21,7 +21,7 @@ bot answers **only** from the documents the company uploaded — with sources.
 Run the demo yourself, or re-record these clips: [docs/demo.md](docs/demo.md).
 Put Sanad on a real server: [deployment/README.md](deployment/README.md).
 
-> Status: **Step 6c — human handoff**. Working project name.
+> **v0.1.0** — first release. See the [changelog](CHANGELOG.md).
 
 ## Quick start (Docker, one command)
 
@@ -613,7 +613,7 @@ Each step ships with tests, docs and small commits.
    - **6a** *(done)*: golden Q&A evaluation — 33 questions (11 per language), grounded/out-of-scope/injection cases, deterministic fact + citation + refusal scoring, sample company and demo documents, dashboard evaluation page
    - **6b** *(done)*: SSRF-safe website crawler — IP-pinned connections, per-hop redirect re-validation, same-domain + robots.txt, page/size/time limits, injection-sanitized storage, safe scheduled re-sync, dashboard Website tab
    - **6c** *(done)*: human handoff — widget form with privacy notice, email (SMTP) + Telegram delivery, env-only secrets, header-injection protection, per-IP + daily rate limits, privacy toggle respected, dashboard Handoffs tab and Settings destinations
-7. **Documentation, demo and release** — demo GIF/video, CI, live demo, first release
+7. **Documentation, demo and release** — demo GIF/video, CI, live demo, first release *(done)*
 
 ## License
 
