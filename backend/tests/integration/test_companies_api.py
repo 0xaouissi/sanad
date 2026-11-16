@@ -43,4 +43,5 @@ async def test_invalid_api_key_rejected(client):
 
 async def test_missing_api_key_rejected(client):
     response = await client.get("/api/v1/documents")
-    assert response.status_code == 422
+    assert response.status_code == 401
+    assert "X-API-Key" in response.json()["detail"]

@@ -95,4 +95,4 @@ async def test_reranker_rescores_and_reorders(client) -> None:
     assert reranker.calls, "reranker was not called"
     assert hits[0].heading == "Refund policy"
     assert hits[0].score == 0.9
-    assert all(hit.score >= 0.55 for hit in hits)
+    assert all(hit.score >= get_settings().retrieval_min_score for hit in hits)

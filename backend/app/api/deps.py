@@ -12,14 +12,14 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 async def get_current_company(
     session: SessionDep,
-    x_api_key: Annotated[str, Header()],
+    x_api_key: Annotated[str | None, Header()] = None,
 ) -> Company:
-    company = await company_for_api_key(session, x_api_key)
+    company = await company_for_api_key(session, x_api_key) if x_api_key else None
     if company is None:
         raise HTTPException(
             status_code=401,
-            detail="Invalid API key. Pass the company key from POST /api/v1/companies "
-            "in the X-API-Key header.",
+            detail="Invalid or missing API key. Pass the company key from "
+            "POST /api/v1/companies in the X-API-Key header.",
         )
     return company
 

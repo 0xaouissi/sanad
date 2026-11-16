@@ -4,40 +4,34 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import CompanyDep, SessionDep
+from app.core.config import get_settings
+from app.db.models import Company
+from app.providers.embeddings import get_embedding_provider
+from app.providers.embeddings.base import EmbeddingError, EmbeddingProvider
 from app.providers.llm import get_llm_provider
-from app.providers.llm.base import (
-    ChatMessage,
-    LLMError,
-    LLMProvider,
-    LLMUnavailableError,
-)
+from app.providers.llm.base import LLMError, LLMProvider, LLMUnavailableError
+from app.providers.reranker import get_rerank_provider
+from app.providers.reranker.base import RerankError, RerankProvider
 from app.schemas.chat import ChatRequest, ChatResponse
+from app.services.rag_chat import ConversationNotFoundError, answer_question, stream_answer
 
 router = APIRouter(tags=["chat"])
 
-SYSTEM_PROMPT = (
-    "You are Sanad, a helpful assistant. Reply in the same language as the user's "
-    "message (Modern Standard Arabic, French or English). Keep answers short and friendly."
-)
-
-
-def _messages(message: str) -> list[ChatMessage]:
-    return [
-        ChatMessage(role="system", content=SYSTEM_PROMPT),
-        ChatMessage(role="user", content=message),
-    ]
+EmbedderDep = Annotated[EmbeddingProvider, Depends(get_embedding_provider)]
+RerankerDep = Annotated[RerankProvider | None, Depends(get_rerank_provider)]
+LLMDep = Annotated[LLMProvider, Depends(get_llm_provider)]
 
 
 async def _sse(
-    provider: LLMProvider, messages: list[ChatMessage]
+    session: AsyncSession, company: Company, question: str, **kwargs
 ) -> AsyncIterator[str]:
     try:
-        async for token in provider.stream_chat(messages):
-            event = {"type": "token", "content": token}
+        async for event in stream_answer(session, company, question, **kwargs):
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
-    except LLMError as exc:
+    except (ConversationNotFoundError, LLMError, EmbeddingError, RerankError) as exc:
         event = {"type": "error", "detail": str(exc)}
         yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
@@ -45,17 +39,40 @@ async def _sse(
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
-    provider: Annotated[LLMProvider, Depends(get_llm_provider)],
+    company: CompanyDep,
+    session: SessionDep,
+    embedder: EmbedderDep,
+    reranker: RerankerDep,
+    llm: LLMDep,
 ) -> ChatResponse | StreamingResponse:
-    messages = _messages(request.message)
+    kwargs = {
+        "embedder": embedder,
+        "llm": llm,
+        "settings": get_settings(),
+        "reranker": reranker,
+        "conversation_id": request.conversation_id,
+        "language": request.language,
+    }
     if request.stream:
         return StreamingResponse(
-            _sse(provider, messages), media_type="text/event-stream"
+            _sse(session, company, request.message, **kwargs),
+            media_type="text/event-stream",
         )
     try:
-        answer = await provider.chat(messages)
+        outcome = await answer_question(session, company, request.message, **kwargs)
+    except ConversationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except LLMUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (EmbeddingError, RerankError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return ChatResponse(answer=answer, model=provider.model, provider=provider.name)
+    return ChatResponse(
+        answer=outcome.answer,
+        model=llm.model,
+        provider=llm.name,
+        language=outcome.language,
+        conversation_id=outcome.conversation_id,
+        citations=outcome.citations,
+    )

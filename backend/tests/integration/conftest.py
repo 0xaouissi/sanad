@@ -19,6 +19,7 @@ from app.main import create_app
 from app.providers.embeddings import get_embedding_provider
 from app.providers.embeddings.base import EmbeddingProvider
 from app.providers.llm import get_llm_provider
+from app.providers.llm.base import ChatMessage, LLMProvider, LLMUnavailableError
 from app.providers.reranker import get_rerank_provider
 
 ADMIN_KEY = "test-admin-key"
@@ -57,6 +58,9 @@ class FakeEmbedder(EmbeddingProvider):
 async def db_ready(monkeypatch: MonkeyPatch, tmp_path) -> AsyncIterator[None]:
     monkeypatch.setenv("ADMIN_API_KEY", ADMIN_KEY)
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    # FakeEmbedder's bag-of-words cosine scores are much lower than real BGE-M3
+    # similarities; the 0.55 default is calibrated for the real model (see e2e).
+    monkeypatch.setenv("RETRIEVAL_MIN_SCORE", "0.1")
     monkeypatch.setenv(
         "DATABASE_URL",
         os.environ.get(
@@ -83,12 +87,54 @@ async def db_ready(monkeypatch: MonkeyPatch, tmp_path) -> AsyncIterator[None]:
     get_rerank_provider.cache_clear()
 
 
+class ScriptedLLM(LLMProvider):
+    """Returns scripted answers in order (last one repeats); records every call."""
+
+    name = "fake"
+    model = "fake-model"
+
+    def __init__(self) -> None:
+        self.answers: list[str] = ["Hello!"]
+        self.calls: list[list[ChatMessage]] = []
+        self.fail = False
+
+    def _next_answer(self) -> str:
+        if self.fail:
+            raise LLMUnavailableError("model service is down (fake)")
+        if len(self.answers) > 1:
+            return self.answers.pop(0)
+        return self.answers[0]
+
+    async def chat(self, messages: list[ChatMessage]) -> str:
+        self.calls.append(list(messages))
+        return self._next_answer()
+
+    async def stream_chat(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
+        self.calls.append(list(messages))
+        answer = self._next_answer()
+        for word in answer.split():
+            yield word + " "
+
+    async def health(self) -> None:
+        if self.fail:
+            raise LLMUnavailableError("model service is down (fake)")
+
+
 @pytest.fixture
-async def client(db_ready, monkeypatch: MonkeyPatch) -> AsyncIterator[AsyncClient]:
+def fake_llm() -> ScriptedLLM:
+    return ScriptedLLM()
+
+
+@pytest.fixture
+async def client(
+    db_ready, monkeypatch: MonkeyPatch, fake_llm: ScriptedLLM
+) -> AsyncIterator[AsyncClient]:
     fake = FakeEmbedder()
     monkeypatch.setattr("app.services.ingestion.get_embedding_provider", lambda: fake)
     app = create_app()
     app.dependency_overrides[get_embedding_provider] = lambda: fake
+    app.dependency_overrides[get_llm_provider] = lambda: fake_llm
+    app.dependency_overrides[get_rerank_provider] = lambda: None
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as test_client:
