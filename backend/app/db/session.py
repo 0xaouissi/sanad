@@ -45,6 +45,14 @@ async def init_db() -> None:
         async with engine.begin() as conn:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             await conn.run_sync(Base.metadata.create_all)
+            # create_all skips existing tables; keep the FTS index present on
+            # databases created before Step 3.
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_chunks_fts "
+                    "ON chunks USING gin (to_tsvector('simple', content))"
+                )
+            )
     except (SQLAlchemyError, OSError) as exc:
         url = get_settings().database_url
         raise DatabaseUnavailableError(
