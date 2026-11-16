@@ -74,5 +74,6 @@ async def chat(
         provider=llm.name,
         language=outcome.language,
         conversation_id=outcome.conversation_id,
+        message_id=outcome.message_id,
         citations=outcome.citations,
     )

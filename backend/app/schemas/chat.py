@@ -33,4 +33,5 @@ class ChatResponse(BaseModel):
     provider: str
     language: str
     conversation_id: uuid.UUID
+    message_id: uuid.UUID
     citations: list[Citation]

@@ -59,6 +59,7 @@ class ChatOutcome:
     answer: str
     language: str
     conversation_id: uuid.UUID
+    message_id: uuid.UUID
     citations: list[Citation]
 
 
@@ -166,17 +167,17 @@ async def _save_turn(
     question: str,
     answer: str,
     language: str,
-) -> None:
+) -> uuid.UUID:
     session.add(
         Message(conversation_id=conversation.id, role="user", content=question, language=language)
     )
-    session.add(
-        Message(
-            conversation_id=conversation.id, role="assistant", content=answer, language=language
-        )
+    assistant = Message(
+        conversation_id=conversation.id, role="assistant", content=answer, language=language
     )
+    session.add(assistant)
     conversation.updated_at = datetime.now(UTC)
     await session.commit()
+    return assistant.id
 
 
 def _prepare_messages(
@@ -250,11 +251,12 @@ async def answer_question(
             tier=settings.model_tier,
         )
 
-    await _save_turn(session, conversation, question, answer, language)
+    message_id = await _save_turn(session, conversation, question, answer, language)
     return ChatOutcome(
         answer=answer,
         language=language,
         conversation_id=conversation.id,
+        message_id=message_id,
         citations=citations,
     )
 
@@ -355,10 +357,11 @@ async def stream_answer(
             tier=settings.model_tier,
         )
 
-    await _save_turn(session, conversation, question, answer, language)
+    message_id = await _save_turn(session, conversation, question, answer, language)
     yield {
         "type": "done",
         "conversation_id": str(conversation.id),
+        "message_id": str(message_id),
         "language": language,
         "citations": [citation.model_dump(mode="json") for citation in citations],
     }
