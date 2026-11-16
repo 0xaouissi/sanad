@@ -38,7 +38,10 @@ async def test_search_returns_metadata(client):
 
 async def test_search_top_k_limit(client):
     company = await create_company(client)
-    long_text = "\n\n".join(f"Section {i} about refund number {i}." for i in range(20))
+    long_text = "\n\n".join(
+        f"Section {i} about refund number {i}. " + "Details on the refund process. " * 8
+        for i in range(20)
+    )
     await upload(client, company["api_key"], "long.txt", long_text.encode())
     response = await client.post(
         "/api/v1/search",

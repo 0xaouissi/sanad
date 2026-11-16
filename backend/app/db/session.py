@@ -2,8 +2,7 @@ from collections.abc import AsyncIterator
 from functools import lru_cache
 
 import structlog
-from pgvector.asyncpg import register_vector
-from sqlalchemy import event, text
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -24,14 +23,10 @@ class DatabaseUnavailableError(RuntimeError):
 
 @lru_cache
 def get_engine() -> AsyncEngine:
-    settings = get_settings()
-    engine = create_async_engine(settings.database_url, pool_pre_ping=True)
-
-    @event.listens_for(engine.sync_engine, "connect")
-    def _register_vector(dbapi_connection, _connection_record) -> None:
-        dbapi_connection.run_async(register_vector)
-
-    return engine
+    # No register_vector here: pgvector's SQLAlchemy type already serializes to
+    # the text form asyncpg passes through for the vector OID. Registering the
+    # binary codec would reject that string (expects list/ndarray).
+    return create_async_engine(get_settings().database_url, pool_pre_ping=True)
 
 
 @lru_cache
