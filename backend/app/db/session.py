@@ -1,7 +1,10 @@
 from collections.abc import AsyncIterator
 from functools import lru_cache
+from pathlib import Path
 
 import structlog
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
@@ -12,9 +15,10 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import get_settings
-from app.db.models import Base
 
 log = structlog.get_logger()
+
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 class DatabaseUnavailableError(RuntimeError):
@@ -39,44 +43,21 @@ async def get_session() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+def _run_migrations(connection) -> None:
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_BACKEND_DIR / "migrations"))
+    cfg.attributes["connection"] = connection
+    command.upgrade(cfg, "head")
+
+
 async def init_db() -> None:
     engine = get_engine()
     try:
         async with engine.begin() as conn:
+            # The extension needs superuser rights; the README covers creating
+            # it once. Migrations assume it exists.
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            await conn.run_sync(Base.metadata.create_all)
-            # create_all skips existing tables; keep the FTS index present on
-            # databases created before Step 3.
-            await conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS ix_chunks_fts "
-                    "ON chunks USING gin (to_tsvector('simple', content))"
-                )
-            )
-            # create_all does not alter existing tables; add the Step 4 columns
-            # to databases created earlier (replaced by Alembic in Step 5).
-            await conn.execute(
-                text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS site_key VARCHAR(64)")
-            )
-            await conn.execute(
-                text(
-                    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS "
-                    "allowed_domains JSON NOT NULL DEFAULT '[]'"
-                )
-            )
-            await conn.execute(
-                text(
-                    "UPDATE companies SET site_key = "
-                    "'pk-' || replace(gen_random_uuid()::text, '-', '') "
-                    "WHERE site_key IS NULL"
-                )
-            )
-            await conn.execute(
-                text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_companies_site_key "
-                    "ON companies (site_key)"
-                )
-            )
+            await conn.run_sync(_run_migrations)
     except (SQLAlchemyError, OSError) as exc:
         url = get_settings().database_url
         raise DatabaseUnavailableError(
