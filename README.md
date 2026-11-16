@@ -12,7 +12,7 @@ bot answers **only** from the documents the company uploaded — with sources.
   React SPA dashboard (Vite) · one `docker compose up` command.
 - License: MIT.
 
-> Status: **Step 6b — website crawler**. Working project name.
+> Status: **Step 6c — human handoff**. Working project name.
 
 ## Quick start (Docker, one command)
 
@@ -282,9 +282,12 @@ Then open `http://localhost:8000/dashboard/` and sign in. Pages:
 - **Website** — crawl your site's policy pages into documents, sync, delete (Step 6b).
 - **Failed questions** — what the bot refused, with language and date.
 - **Ratings** — visitor thumbs up/down with the question and answer.
+- **Handoffs** — visitors' requests to talk to a human, with per-channel
+  delivery status (Step 6c).
 - **Evaluation** — run the golden Q&A set and see per-language scores (Step 6a).
 - **Settings** — the widget snippet (copy button), allowed domains, the
-  conversation-storage privacy toggle, key rotation, JSON export,
+  conversation-storage privacy toggle, handoff destinations (support email,
+  Telegram chat id), key rotation, JSON export,
   delete-all-conversations, and team management.
 
 Security:
@@ -307,6 +310,7 @@ Security:
 - **Privacy toggle**: with *Store conversations* off, chats are still
   answered but nothing is persisted — no history, failed questions, ratings
   or cache — and chat responses carry null conversation/message ids.
+  Handoff requests are still delivered but not saved (Step 6c).
 - **Export** downloads all company data as JSON (no keys, no password
   hashes); **delete-all-conversations** removes messages and ratings too.
 
@@ -413,6 +417,62 @@ All settings are documented in [.env.example](.env.example).
 `CRAWL_ALLOW_PRIVATE=true` exists **only** so tests and local development
 can crawl a loopback fixture site; never enable it on a reachable server.
 
+## Human handoff (Step 6c)
+
+Visitors can ask for a human at any time: a **"Talk to a human"** link in the
+widget footer opens a small form (email + message + privacy notice). The
+request is delivered to the company's support **email** and/or **Telegram**
+chat, and — when *Store conversations* is on — listed in the dashboard's
+read-only **Handoffs** tab with per-channel delivery status.
+
+Setup is two layers:
+
+1. **Server transports** (environment only — secrets never touch the database
+   or the API): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`,
+   `SMTP_FROM`, `SMTP_STARTTLS`, `SMTP_TIMEOUT_SECONDS` for email;
+   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_API_BASE`, `TELEGRAM_TIMEOUT_SECONDS` for
+   Telegram (create a bot with [@BotFather](https://t.me/BotFather), message
+   it once, then use your chat id or a group/channel id). An empty host/token
+   disables that channel. `SMTP_HOST` without `SMTP_FROM` fails fast at
+   startup with a clear message.
+2. **Company destinations** (dashboard Settings, owner-only):
+   `handoff_email` and `telegram_chat_id`. The API only ever exposes whether
+   each server transport is configured (`smtp_configured` /
+   `telegram_configured` booleans), never the credentials.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/handoff \
+  -H "X-Site-Key: pk-..." -H "Origin: https://yourdomain.com" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "visitor@example.com", "message": "Please call me back"}'
+# → {"email": "sent", "telegram": "skipped", "stored": true}
+```
+
+Guarantees:
+
+- **Same auth as chat**: public site key + the company's `Origin` allowlist
+  (or the secret API key server-side), plus the widget bot check
+  (honeypot + timing) on the site-key path.
+- **Validation & header-injection protection**: emails are strictly
+  validated (length, shape, no control characters or line breaks); chat ids
+  must be numeric or `@channelname`. Company names and addresses are
+  additionally stripped of control characters when building email headers.
+- **Rate limits**: `HANDOFF_RATE_LIMIT_PER_IP` (default 5/minute) and
+  `HANDOFF_DAILY_CAP_PER_COMPANY` (default 50/UTC day), `0` disables,
+  429 + `Retry-After`, fail-open when Redis is down — separate buckets from
+  chat limits.
+- **Actionable errors**: no destination configured → 409 telling the owner
+  what to add in Settings; destination set but server transport missing →
+  409 naming the exact env vars; one channel failing → 200 with per-channel
+  statuses; both failing → 502 (the failed attempt is still stored when
+  storage is on). SMTP passwords and Telegram tokens never appear in
+  responses or logs.
+- **Privacy**: the form shows a notice before sending; with *Store
+  conversations* off the request is delivered but nothing is saved.
+- The email carries `Reply-To: visitor@…` so the team can answer directly;
+  Arabic/French/English messages are sent as UTF-8, and Telegram text is
+  capped at the Bot API's 4096 characters.
+
 ## Native development (no Docker)
 
 1. Install [Ollama](https://ollama.com/download) and pull the small-tier model:
@@ -463,7 +523,7 @@ and checks the setup at `GET /health/db`.
 cd backend
 .venv/Scripts/python.exe -m pytest -q                 # unit tests (offline, mocked providers)
 .venv/Scripts/python.exe -m pytest -m integration     # real PostgreSQL + pgvector (fake embeddings)
-.venv/Scripts/python.exe -m pytest -m e2e             # live: real Ollama + BGE-M3, ar/fr/en chat + refusal + crawl→chat
+.venv/Scripts/python.exe -m pytest -m e2e             # live: real Ollama + BGE-M3, ar/fr/en chat + refusal + crawl→chat + handoff transports
 .venv/Scripts/python.exe -m ruff check app tests
 ```
 
@@ -474,19 +534,23 @@ clear message when a dependency is missing. The OCR E2E also needs
 
 ### Browser tests (real Chromium)
 
-Eighteen Playwright tests drive real pages. **Widget (11):** Arabic RTL,
+Twenty-one Playwright tests drive real pages. **Widget (13):** Arabic RTL,
 mobile viewport, citation popovers, thumbs-up persisted to the database,
 manual French, custom colors/logo/welcome/theme, XSS from a malicious
-document, rejection from a non-allowed domain, and the bot check (hidden
-honeypot field, filled-honeypot rejection). **Dashboard (7):** login with
+document, rejection from a non-allowed domain, the bot check (hidden
+honeypot field, filled-honeypot rejection), and the handoff form (real
+delivery to a local SMTP sink + stored row, Arabic labels and the
+not-configured error). **Dashboard (8):** login with
 wrong-password error and cookie-session persistence, document upload and
 delete through the UI, confirm dialogs (dismiss keeps, accept deletes),
 viewer read-only access added through the UI, Arabic RTL / French labels,
 settings (snippet, domains save, key-rotation confirm), the evaluation
 tab (golden counts per language, missing-documents warning, owner-only run
-button hidden from viewers), and the website tab (crawl a local fixture
+button hidden from viewers), the website tab (crawl a local fixture
 site with real embeddings, robots-blocked page never fetched, crawled
-documents appear and are deleted with the source, viewer read-only).
+documents appear and are deleted with the source, viewer read-only), and
+the handoffs tab (destinations saved in Settings, a real visitor request
+delivered to the SMTP sink and listed, viewer read-only).
 
 ```bash
 pip install -e ".[browser]"
@@ -539,7 +603,7 @@ Each step ships with tests, docs and small commits.
 6. **Evaluation page, website crawling, human handoff** — split in three:
    - **6a** *(done)*: golden Q&A evaluation — 33 questions (11 per language), grounded/out-of-scope/injection cases, deterministic fact + citation + refusal scoring, sample company and demo documents, dashboard evaluation page
    - **6b** *(done)*: SSRF-safe website crawler — IP-pinned connections, per-hop redirect re-validation, same-domain + robots.txt, page/size/time limits, injection-sanitized storage, safe scheduled re-sync, dashboard Website tab
-   - **6c**: human handoff by email and Telegram with rate limits and privacy controls
+   - **6c** *(done)*: human handoff — widget form with privacy notice, email (SMTP) + Telegram delivery, env-only secrets, header-injection protection, per-IP + daily rate limits, privacy toggle respected, dashboard Handoffs tab and Settings destinations
 7. **Documentation, demo and release** — demo GIF/video, CI, live demo, first release
 
 ## License

@@ -1,7 +1,7 @@
 # Sanad dashboard
 
 Admin single-page app: **Vite + React + TypeScript**, no router or i18n
-libraries — six tabs, a small translation dictionary, ~56 kB gzipped.
+libraries — seven tabs, a small translation dictionary, ~57 kB gzipped.
 
 - **Login** — email + password (scrypt-hashed server-side), httpOnly cookie
   session, CSRF token on every mutation, login rate limiting.
@@ -12,13 +12,17 @@ libraries — six tabs, a small translation dictionary, ~56 kB gzipped.
   behind a confirm dialog). See the crawler section in the main README.
 - **Failed questions** — questions the bot refused, with language and date.
 - **Ratings** — visitor thumbs up/down with the question and answer.
+- **Handoffs** — visitors' requests to talk to a human: email, message,
+  language, per-channel delivery badges and date (read-only for everyone).
 - **Evaluation** — run the 33-question golden set (11 per language) against
   the company's documents; live progress, per-language and per-category
   scores, and each case with its failed checks. Owner-only run button;
   warns when the demo documents from `samples/` are missing.
 - **Settings** — widget snippet with copy button, allowed domains, the
-  conversation-storage privacy toggle, key rotation (new keys shown once),
-  JSON export, delete-all-conversations, and team management (add viewers).
+  conversation-storage privacy toggle, handoff destinations (support email,
+  Telegram chat id) with server-transport availability hints, key rotation
+  (new keys shown once), JSON export, delete-all-conversations, and team
+  management (add viewers).
 - **Languages** — English, French, Arabic; Arabic switches the whole page to
   RTL. The choice is remembered in `localStorage`.
 
