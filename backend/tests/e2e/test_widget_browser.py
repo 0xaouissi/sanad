@@ -3,8 +3,8 @@
 Runs against a live uvicorn subprocess (real Ollama + BGE-M3 + PostgreSQL) and
 a local static server, so the browser sends a real Origin header. Covers RTL
 Arabic, mobile full-screen, streaming, clickable citations, thumbs feedback,
-themes/config, domain blocking, and injection-safe rendering of a malicious
-document.
+themes/config, domain blocking, injection-safe rendering of a malicious
+document, and the human-handoff form (real local SMTP sink).
 
 Run: PLAYWRIGHT_BROWSERS_PATH=... pytest -m e2e (see README).
 """
@@ -15,11 +15,13 @@ import functools
 import http.server
 import os
 import socket
+import socketserver
 import subprocess
 import sys
 import threading
 import time
 from pathlib import Path
+from uuid import uuid4
 
 import asyncpg
 import httpx
@@ -74,8 +76,50 @@ def _free_port() -> int:
         return sock.getsockname()[1]
 
 
+class _SMTPSinkHandler(socketserver.StreamRequestHandler):
+    """Minimal SMTP dialogue: captures every DATA payload, no auth, no TLS."""
+
+    def handle(self):
+        self.wfile.write(b"220 sink ready\r\n")
+        in_data = False
+        lines: list[bytes] = []
+        while True:
+            line = self.rfile.readline()
+            if not line:
+                break
+            if in_data:
+                if line == b".\r\n":
+                    in_data = False
+                    self.server.messages.append(b"".join(lines))
+                    lines = []
+                    self.wfile.write(b"250 OK\r\n")
+                else:
+                    lines.append(line)
+                continue
+            cmd = line.strip().upper()
+            if cmd.startswith(b"DATA"):
+                in_data = True
+                self.wfile.write(b"354 go ahead\r\n")
+            elif cmd.startswith(b"QUIT"):
+                self.wfile.write(b"221 bye\r\n")
+                break
+            else:
+                self.wfile.write(b"250 OK\r\n")
+
+
 @pytest.fixture(scope="module")
-def widget_server(tmp_path_factory):
+def smtp_sink():
+    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), _SMTPSinkHandler)
+    server.messages = []
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield server
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.fixture(scope="module")
+def widget_server(tmp_path_factory, smtp_sink):
     try:
         httpx.get(f"{OLLAMA_URL}/api/tags", timeout=3, trust_env=False).raise_for_status()
     except (httpx.HTTPError, OSError) as exc:
@@ -97,6 +141,11 @@ def widget_server(tmp_path_factory):
             # Timing enforcement is covered by integration tests; the widget
             # still sends opened_at and the honeypot stays active here.
             "BOT_CHECK_MIN_SECONDS": "0",
+            # Handoff email goes to the local sink; Telegram stays unconfigured.
+            "SMTP_HOST": "127.0.0.1",
+            "SMTP_PORT": str(smtp_sink.server_address[1]),
+            "SMTP_FROM": "widget@sanad.test",
+            "SMTP_STARTTLS": "false",
         }
     )
     if _HF_HOME:
@@ -469,3 +518,121 @@ async def test_filled_honeypot_shows_bot_check_error(page, widget_server, blank_
     error = page.locator(".sanad-bubble.sanad-error")
     await error.wait_for(state="visible", timeout=30_000)
     assert "Bot check failed" in await error.inner_text()
+
+
+async def _enable_handoff(server: dict, company: dict, email: str) -> None:
+    """Give the company an owner and set its handoff destination via the API."""
+    owner_email = f"owner-{uuid4().hex[:8]}@handoff.test"
+    async with httpx.AsyncClient(
+        base_url=server["base"], timeout=60, trust_env=False
+    ) as client:
+        response = await client.post(
+            "/api/v1/companies",
+            json={
+                "name": "Handoff Co",
+                "owner_email": owner_email,
+                "owner_password": "owner-password-1",
+            },
+            headers={"X-Admin-Key": server["admin"]},
+        )
+        assert response.status_code == 201, response.text
+        owned = response.json()
+        response = await client.put(
+            "/api/v1/companies/domains",
+            json={"domains": ["localhost"]},
+            headers={"X-API-Key": owned["api_key"]},
+        )
+        assert response.status_code == 200, response.text
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": owner_email, "password": "owner-password-1"},
+        )
+        assert login.status_code == 200, login.text
+        response = await client.put(
+            "/api/v1/dashboard/settings",
+            json={"handoff_email": email},
+            headers={"X-CSRF-Token": login.json()["csrf_token"]},
+        )
+        assert response.status_code == 200, response.text
+    company.update(owned)
+
+
+async def test_handoff_form_delivers_email_and_shows_success(
+    page, widget_server, blank_site, smtp_sink
+):
+    site_dir, site_url, _ = blank_site
+    company: dict = {}
+    await _enable_handoff(widget_server, company, "support@handoff.test")
+    write_blank_page(site_dir, widget_server, company)
+    await _open_widget(page, site_url)
+
+    button = page.locator(".sanad-handoff")
+    assert await button.inner_text() == "Talk to a human"
+    await button.click()
+    await page.locator(".sanad-handoff-view").wait_for(state="visible")
+    assert await page.locator(".sanad-form").is_hidden()
+    notice = await page.locator(".sanad-handoff-notice").inner_text()
+    assert "shared with this website's team" in notice
+
+    await page.locator(".sanad-handoff-view input[type='email']").fill("visitor@example.com")
+    await page.locator(".sanad-handoff-textarea").fill("Please call me back")
+    await page.locator(".sanad-handoff-submit").click()
+    await page.locator(".sanad-handoff-view").wait_for(state="hidden", timeout=30_000)
+    await page.locator(".sanad-form").wait_for(state="visible")
+    success = await page.locator(".sanad-bot .sanad-content").last.inner_text()
+    assert "request was sent" in success
+
+    deadline = time.monotonic() + 15
+    while not smtp_sink.messages and time.monotonic() < deadline:
+        await asyncio.sleep(0.2)
+    assert smtp_sink.messages, "SMTP sink received no message"
+    raw = smtp_sink.messages[-1].decode("utf-8", "replace")
+    assert "visitor@example.com" in raw
+    assert "Please call me back" in raw
+    assert "support@handoff.test" in raw
+
+    dsn = _DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+    conn = await asyncpg.connect(dsn, timeout=5)
+    try:
+        rows = await conn.fetch(
+            "SELECT h.email, h.email_status, h.telegram_status FROM handoff_requests h "
+            "JOIN companies c ON c.id = h.company_id WHERE c.site_key = $1",
+            company["site_key"],
+        )
+    finally:
+        await conn.close()
+    assert len(rows) == 1
+    assert rows[0]["email"] == "visitor@example.com"
+    assert rows[0]["email_status"] == "SENT"
+    assert rows[0]["telegram_status"] == "SKIPPED"
+
+
+async def test_handoff_form_arabic_labels_and_not_configured_error(
+    page, widget_server, blank_site
+):
+    site_dir, site_url, _ = blank_site
+    company = await setup_company(widget_server)  # no handoff destination set
+    write_blank_page(site_dir, widget_server, company)
+    await _open_widget(page, site_url)
+    await page.locator(".sanad-lang").select_option("ar")
+
+    button = page.locator(".sanad-handoff")
+    assert await button.inner_text() == "التحدث إلى موظف"
+    await button.click()
+    await page.locator(".sanad-handoff-view").wait_for(state="visible")
+    direction = await page.evaluate(
+        "document.getElementById('sanad-widget-host').shadowRoot.querySelector('.sanad-root').dir"
+    )
+    assert direction == "rtl"
+    assert "سيتم مشاركة" in await page.locator(".sanad-handoff-notice").inner_text()
+
+    await page.locator(".sanad-handoff-view input[type='email']").fill("visitor@example.com")
+    await page.locator(".sanad-handoff-textarea").fill("أريد التحدث إلى موظف")
+    await page.locator(".sanad-handoff-submit").click()
+    note = page.locator(".sanad-handoff-note")
+    await note.wait_for(state="visible", timeout=30_000)
+    assert "Settings" in await note.inner_text()
+
+    await page.locator(".sanad-handoff-back").click()
+    await page.locator(".sanad-handoff-view").wait_for(state="hidden")
+    await page.locator(".sanad-input").wait_for(state="visible")

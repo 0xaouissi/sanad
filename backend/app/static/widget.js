@@ -46,6 +46,15 @@
       page: "page",
       section: "section",
       auto: "Auto",
+      handoff: "Talk to a human",
+      handoffEmail: "Your email address",
+      handoffMessage: "Your message",
+      handoffNotice:
+        "Your email address and message will be shared with this website's team so they can reply to you.",
+      handoffSubmit: "Send request",
+      handoffBack: "Back to chat",
+      handoffSuccess: "Your request was sent. The team will contact you by email.",
+      handoffError: "Could not send your request. Please try again.",
     },
     fr: {
       title: "Sanad",
@@ -62,6 +71,15 @@
       page: "page",
       section: "section",
       auto: "Auto",
+      handoff: "Parler à un humain",
+      handoffEmail: "Votre adresse e-mail",
+      handoffMessage: "Votre message",
+      handoffNotice:
+        "Votre adresse e-mail et votre message seront partagés avec l'équipe de ce site afin qu'elle puisse vous répondre.",
+      handoffSubmit: "Envoyer la demande",
+      handoffBack: "Retour au chat",
+      handoffSuccess: "Votre demande a été envoyée. L'équipe vous contactera par e-mail.",
+      handoffError: "Impossible d'envoyer votre demande. Veuillez réessayer.",
     },
     ar: {
       title: "سند",
@@ -78,6 +96,15 @@
       page: "صفحة",
       section: "قسم",
       auto: "تلقائي",
+      handoff: "التحدث إلى موظف",
+      handoffEmail: "بريدك الإلكتروني",
+      handoffMessage: "رسالتك",
+      handoffNotice:
+        "سيتم مشاركة بريدك الإلكتروني ورسالتك مع فريق هذا الموقع حتى يتمكنوا من الرد عليك.",
+      handoffSubmit: "إرسال الطلب",
+      handoffBack: "العودة إلى المحادثة",
+      handoffSuccess: "تم إرسال طلبك. سيتواصل معك الفريق عبر البريد الإلكتروني.",
+      handoffError: "تعذر إرسال طلبك. يرجى المحاولة مرة أخرى.",
     },
   };
 
@@ -199,6 +226,24 @@ padding:8px 12px;background:var(--sanad-bg);color:var(--sanad-fg);font:inherit;o
 color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .sanad-send:disabled{opacity:.5;cursor:default;}
 .sanad-website{position:absolute;left:-9999px;width:1px;height:1px;opacity:0;}
+.sanad-handoff{background:none;border:none;border-top:1px solid var(--sanad-border);
+color:var(--sanad-muted);cursor:pointer;font:inherit;font-size:12px;padding:8px;text-align:center;}
+.sanad-handoff:hover{color:var(--sanad-accent);}
+.sanad-handoff-view{flex:1;display:flex;flex-direction:column;gap:10px;padding:14px;overflow-y:auto;}
+.sanad-handoff-title{font-size:15px;font-weight:600;margin:0;}
+.sanad-handoff-input{border:1px solid var(--sanad-border);border-radius:8px;padding:8px 10px;
+background:var(--sanad-bg);color:var(--sanad-fg);font:inherit;outline:none;width:100%;}
+.sanad-handoff-input:focus{border-color:var(--sanad-accent);}
+.sanad-handoff-textarea{resize:vertical;min-height:80px;}
+.sanad-handoff-notice{font-size:12px;color:var(--sanad-muted);margin:0;}
+.sanad-handoff-note{font-size:12px;color:var(--sanad-err-fg);background:var(--sanad-err-bg);
+border-radius:8px;padding:8px;margin:0;overflow-wrap:anywhere;}
+.sanad-handoff-actions{display:flex;gap:8px;justify-content:flex-end;}
+.sanad-handoff-back{background:none;border:1px solid var(--sanad-border);border-radius:999px;
+color:var(--sanad-fg);cursor:pointer;font:inherit;padding:8px 14px;}
+.sanad-handoff-submit{background:var(--sanad-accent);border:none;border-radius:999px;color:#fff;
+cursor:pointer;font:inherit;padding:8px 14px;}
+.sanad-handoff-submit:disabled,.sanad-handoff-back:disabled{opacity:.5;cursor:default;}
 .sanad-root.sanad-mobile .sanad-panel{inset:0;width:100%;height:100%;max-width:none;max-height:none;border-radius:0;border:none;}
 .sanad-root.sanad-mobile[data-open="true"] .sanad-fab{display:none;}
 `;
@@ -278,6 +323,103 @@ color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center
   form.appendChild(honeypot);
   panel.appendChild(form);
 
+  /* ---------- human handoff ---------- */
+
+  var handoffBtn = el("button", "sanad-handoff");
+  handoffBtn.type = "button";
+  panel.appendChild(handoffBtn);
+
+  var handoffView = el("form", "sanad-handoff-view");
+  handoffView.hidden = true;
+  var handoffTitle = el("h2", "sanad-handoff-title");
+  var handoffEmail = el("input", "sanad-handoff-input");
+  handoffEmail.type = "email";
+  handoffEmail.required = true;
+  handoffEmail.maxLength = 320;
+  handoffEmail.autocomplete = "email";
+  var handoffMessage = el("textarea", "sanad-handoff-input sanad-handoff-textarea");
+  handoffMessage.required = true;
+  handoffMessage.maxLength = 4000;
+  handoffMessage.rows = 4;
+  var handoffNotice = el("p", "sanad-handoff-notice");
+  var handoffNote = el("p", "sanad-handoff-note");
+  handoffNote.hidden = true;
+  var handoffActions = el("div", "sanad-handoff-actions");
+  var handoffBack = el("button", "sanad-handoff-back");
+  handoffBack.type = "button";
+  var handoffSubmit = el("button", "sanad-handoff-submit");
+  handoffSubmit.type = "submit";
+  handoffActions.appendChild(handoffBack);
+  handoffActions.appendChild(handoffSubmit);
+  handoffView.appendChild(handoffTitle);
+  handoffView.appendChild(handoffEmail);
+  handoffView.appendChild(handoffMessage);
+  handoffView.appendChild(handoffNotice);
+  handoffView.appendChild(handoffNote);
+  handoffView.appendChild(handoffActions);
+  panel.appendChild(handoffView);
+
+  function showHandoff(show) {
+    handoffView.hidden = !show;
+    messages.hidden = show;
+    form.hidden = show;
+    handoffBtn.hidden = show;
+    if (show) {
+      handoffNote.hidden = true;
+      handoffEmail.focus();
+    }
+  }
+
+  handoffBtn.addEventListener("click", function () { showHandoff(true); });
+  handoffBack.addEventListener("click", function () {
+    showHandoff(false);
+    input.focus();
+  });
+
+  handoffView.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    var email = handoffEmail.value.trim();
+    var message = handoffMessage.value.trim();
+    if (!email || !message) return;
+    var strings = STRINGS[state.uiLang];
+    handoffSubmit.disabled = true;
+    handoffBack.disabled = true;
+    var payload = {
+      email: email,
+      message: message,
+      website: honeypot.value,
+      opened_at: state.openedAt,
+    };
+    if (state.manualLang) payload.language = state.manualLang;
+    try {
+      var response = await fetch(apiUrl + "/api/v1/handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Site-Key": siteKey },
+        body: JSON.stringify(payload),
+      });
+      if (response.ok) {
+        handoffEmail.value = "";
+        handoffMessage.value = "";
+        showHandoff(false);
+        addMessage("bot", strings.handoffSuccess);
+        input.focus();
+      } else {
+        var detail = strings.handoffError;
+        try {
+          var body = await response.json();
+          if (body && body.detail) detail = String(body.detail);
+        } catch (err) { /* keep default */ }
+        handoffNote.textContent = detail;
+        handoffNote.hidden = false;
+      }
+    } catch (err) {
+      handoffNote.textContent = strings.handoffError;
+      handoffNote.hidden = false;
+    }
+    handoffSubmit.disabled = false;
+    handoffBack.disabled = false;
+  });
+
   if (document.body) {
     document.body.appendChild(host);
   } else {
@@ -319,6 +461,15 @@ color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center
     sendBtn.setAttribute("aria-label", strings.send);
     langSelect.setAttribute("aria-label", strings.auto);
     langSelect.options[0].textContent = strings.auto;
+    handoffBtn.textContent = strings.handoff;
+    handoffTitle.textContent = strings.handoff;
+    handoffEmail.placeholder = strings.handoffEmail;
+    handoffEmail.setAttribute("aria-label", strings.handoffEmail);
+    handoffMessage.placeholder = strings.handoffMessage;
+    handoffMessage.setAttribute("aria-label", strings.handoffMessage);
+    handoffNotice.textContent = strings.handoffNotice;
+    handoffSubmit.textContent = strings.handoffSubmit;
+    handoffBack.textContent = strings.handoffBack;
   }
   applyLanguage();
 
@@ -563,6 +714,7 @@ color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center
       }
       input.focus();
     } else {
+      showHandoff(false);
       fab.focus();
     }
   }
