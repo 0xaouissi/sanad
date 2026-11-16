@@ -23,7 +23,7 @@ from app.providers.embeddings.base import EmbeddingProvider
 from app.providers.kv.base import KVStore
 from app.providers.llm.base import ChatMessage, LLMProvider
 from app.providers.reranker.base import RerankProvider
-from app.rag.injection import leaks_prompt, looks_like_injection
+from app.rag.injection import leaks_prompt, looks_like_injection, sanitize_source
 from app.rag.language import detect_language
 from app.rag.retrieval import RetrievalHit, retrieve
 from app.schemas.chat import Citation
@@ -67,21 +67,6 @@ class ChatOutcome:
     citations: list[Citation]
 
 
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?؟])\s+")
-
-
-def _sanitize_source(text: str) -> str:
-    # Drop instruction-like sentences before they reach the LLM; the stored
-    # document and citations are untouched. Small models otherwise obey
-    # payloads hidden in retrieved text even under a hardened prompt.
-    lines = []
-    for line in text.splitlines():
-        parts = [s for s in _SENTENCE_SPLIT.split(line) if s and not looks_like_injection(s)]
-        if parts:
-            lines.append(" ".join(parts))
-    return "\n".join(lines)
-
-
 def build_context(hits: list[RetrievalHit]) -> str:
     blocks = []
     for index, hit in enumerate(hits, start=1):
@@ -90,7 +75,7 @@ def build_context(hits: list[RetrievalHit]) -> str:
             location += f", page {hit.page_number}"
         if hit.heading:
             location += f', section "{hit.heading}"'
-        blocks.append(f"[{index}] ({location})\n{_sanitize_source(hit.content)}")
+        blocks.append(f"[{index}] ({location})\n{sanitize_source(hit.content)}")
     return "\n\n".join(blocks)
 
 

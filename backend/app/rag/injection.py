@@ -32,6 +32,21 @@ def looks_like_injection(question: str) -> bool:
     return _INJECTION_RE.search(question) is not None
 
 
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?؟])\s+")
+
+
+def sanitize_source(text: str) -> str:
+    # Drop instruction-like sentences before the text reaches the LLM; small
+    # models otherwise obey payloads hidden in source text even under a
+    # hardened prompt. Applied to retrieved chunks and to crawled pages.
+    lines = []
+    for line in text.splitlines():
+        parts = [s for s in _SENTENCE_SPLIT.split(line) if s and not looks_like_injection(s)]
+        if parts:
+            lines.append(" ".join(parts))
+    return "\n".join(lines)
+
+
 def leaks_prompt(answer: str) -> bool:
     lowered = answer.casefold()
     return any(marker in lowered for marker in _PROMPT_MARKERS)
