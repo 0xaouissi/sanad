@@ -1,0 +1,1 @@
+"""Evaluation: golden Q&A scored deterministically (Step 6a)."""
