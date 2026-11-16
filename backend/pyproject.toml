@@ -36,6 +36,9 @@ embeddings = [
     "FlagEmbedding>=1.3",
     "huggingface_hub>=0.24",
 ]
+browser = [
+    "playwright>=1.44",
+]
 
 [build-system]
 requires = ["hatchling"]
