@@ -8,6 +8,7 @@ from app.services.rag_chat import (
     NO_ANSWER,
     build_context,
     build_system_prompt,
+    is_no_answer,
     parse_citations,
 )
 
@@ -74,3 +75,16 @@ def test_no_answer_templates_exist_for_all_languages() -> None:
 )
 def test_no_answer_offers_contact(language: str, contact_word: str) -> None:
     assert contact_word in NO_ANSWER[language]
+
+
+@pytest.mark.parametrize("language", ["ar", "fr", "en"])
+def test_is_no_answer_matches_template_with_or_without_markers(language: str) -> None:
+    template = NO_ANSWER[language]
+    assert is_no_answer(template, language)
+    assert is_no_answer(f"  {template} [1] [4]  ", language)
+
+
+def test_is_no_answer_rejects_real_answers_and_other_languages() -> None:
+    assert not is_no_answer("You have 30 days to request a refund. [1]", "en")
+    assert not is_no_answer(NO_ANSWER["fr"], "en")
+    assert not is_no_answer("I don't know, sorry!", "en")

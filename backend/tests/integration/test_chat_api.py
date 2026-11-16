@@ -117,6 +117,39 @@ async def test_offtopic_question_below_threshold_refuses(
     assert fake_llm.calls == []
 
 
+async def test_llm_refusal_with_sources_is_canonical_and_uncited(
+    client: AsyncClient, fake_llm: ScriptedLLM
+) -> None:
+    company = await _company_with_policy(client)
+    fake_llm.answers = [NO_ANSWER["en"] + " [1] [2]"]
+    response = await client.post(
+        "/api/v1/chat",
+        json={"message": "What is the refund policy?"},
+        headers=auth(company["api_key"]),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(fake_llm.calls) == 1, "sources were retrieved, so the LLM must be called"
+    assert body["answer"] == NO_ANSWER["en"]
+    assert body["citations"] == [], "a refusal must not cite sources"
+
+
+async def test_streamed_llm_refusal_has_no_citations(
+    client: AsyncClient, fake_llm: ScriptedLLM
+) -> None:
+    company = await _company_with_policy(client, POLICY_FR, "politique.md")
+    fake_llm.answers = [NO_ANSWER["fr"] + " [1]"]
+    response = await client.post(
+        "/api/v1/chat",
+        json={"message": "Quelle est la politique de remboursement ?", "stream": True},
+        headers=auth(company["api_key"]),
+    )
+    assert response.status_code == 200
+    events = _events(response.text)
+    assert events[-1]["type"] == "done"
+    assert events[-1]["citations"] == []
+
+
 async def test_conversation_memory_replays_history(
     client: AsyncClient, fake_llm: ScriptedLLM
 ) -> None:

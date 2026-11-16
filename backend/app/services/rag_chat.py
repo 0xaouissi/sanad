@@ -89,6 +89,11 @@ def build_system_prompt(language: str, context: str) -> str:
     )
 
 
+def is_no_answer(answer: str, language: str) -> bool:
+    # The model sometimes appends citation markers to the refusal template.
+    return _CITATION_RE.sub("", answer).strip() == NO_ANSWER[language].strip()
+
+
 def parse_citations(answer: str, hits: list[RetrievalHit]) -> list[Citation]:
     used = {int(n) for n in _CITATION_RE.findall(answer)}
     indexes = sorted(i for i in used if 1 <= i <= len(hits))
@@ -231,7 +236,11 @@ async def answer_question(
                 ChatMessage(role="user", content=_retry_instruction(language)),
             ]
             answer = await llm.chat(messages)
-        citations = parse_citations(answer, hits)
+        if is_no_answer(answer, language):
+            answer = NO_ANSWER[language]
+            citations = []
+        else:
+            citations = parse_citations(answer, hits)
         log.info(
             "chat_latency",
             mode="sync",
@@ -329,7 +338,11 @@ async def stream_answer(
             pieces.append(token)
             yield {"type": "token", "content": token}
         answer = "".join(pieces)
-        citations = parse_citations(answer, hits)
+        if is_no_answer(answer, language):
+            answer = NO_ANSWER[language]
+            citations = []
+        else:
+            citations = parse_citations(answer, hits)
         budget_ms = settings.first_token_budget_s * 1000
         log.info(
             "chat_latency",
