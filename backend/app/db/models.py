@@ -32,6 +32,13 @@ class DocumentStatus(enum.StrEnum):
     FAILED = "failed"
 
 
+class CrawlStatus(enum.StrEnum):
+    PENDING = "pending"
+    CRAWLING = "crawling"
+    READY = "ready"
+    FAILED = "failed"
+
+
 class Company(Base):
     __tablename__ = "companies"
 
@@ -62,6 +69,10 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(500))
     sha256: Mapped[str] = mapped_column(String(64))
     size_bytes: Mapped[int] = mapped_column(Integer)
+    # Set for pages produced by the website crawler; NULL for uploads.
+    crawl_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("crawl_sources.id", ondelete="CASCADE"), index=True, default=None
+    )
     status: Mapped[DocumentStatus] = mapped_column(
         Enum(DocumentStatus, native_enum=False, length=20), default=DocumentStatus.PENDING
     )
@@ -165,6 +176,29 @@ class Feedback(Base):
 class UserRole(enum.StrEnum):
     OWNER = "owner"
     VIEWER = "viewer"
+
+
+class CrawlSource(Base):
+    __tablename__ = "crawl_sources"
+    __table_args__ = (UniqueConstraint("company_id", "url", name="uq_crawl_source_company_url"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True
+    )
+    url: Mapped[str] = mapped_column(String(2000))
+    status: Mapped[CrawlStatus] = mapped_column(
+        Enum(CrawlStatus, native_enum=False, length=20), default=CrawlStatus.PENDING
+    )
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+    pages_crawled: Mapped[int] = mapped_column(Integer, default=0)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    company: Mapped[Company] = relationship()
 
 
 class DashboardUser(Base):
