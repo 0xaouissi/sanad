@@ -104,6 +104,32 @@ py -3.11 -m venv .venv                                # Python 3.11+
 Configuration: copy [.env.example](.env.example) to `backend/.env` (native)
 or `.env` (Docker). Every setting is documented there.
 
+### PostgreSQL + pgvector (native dev)
+
+Docker Compose uses the `pgvector/pgvector:pg16` image, so nothing to do there.
+On a native PostgreSQL install, pgvector must be added once:
+
+- **Windows**: EDB StackBuilder does not carry pgvector. Either compile it
+  (`nmake` with Visual Studio C++, see the
+  [pgvector README](https://github.com/pgvector/pgvector#installation)) or use
+  the community prebuilt DLLs referenced in
+  [pgvector issue #54](https://github.com/pgvector/pgvector/issues/54)
+  (e.g. `andreiramani/pgvector_pgsql_windows` — unofficial; verify the source).
+  Copy `lib/vector.dll` and `share/extension/vector*` into your PostgreSQL
+  folder (admin rights needed).
+- **Linux/macOS**: `apt install postgresql-16-pgvector` (PGDG) or `brew install pgvector`.
+
+Then create the role, database and extension once (as superuser):
+
+```sql
+CREATE ROLE sanad LOGIN PASSWORD 'sanad';
+CREATE DATABASE sanad OWNER sanad;
+\c sanad
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+The API creates its tables at startup and checks the setup at `GET /health/db`.
+
 ## Tests and lint
 
 ```bash
