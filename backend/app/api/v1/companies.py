@@ -2,11 +2,17 @@ from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException
 
-from app.api.deps import SessionDep
+from app.api.deps import CompanyDep, SessionDep
 from app.core.config import get_settings
-from app.core.security import generate_api_key, hash_api_key, keys_match
+from app.core.security import (
+    generate_api_key,
+    generate_site_key,
+    hash_api_key,
+    keys_match,
+    normalize_domains,
+)
 from app.db.models import Company
-from app.schemas.company import CompanyCreate, CompanyCreated
+from app.schemas.company import CompanyCreate, CompanyCreated, DomainsResponse, DomainsUpdate
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
@@ -26,7 +32,23 @@ async def create_company(
     if not keys_match(x_admin_key, admin_key):
         raise HTTPException(status_code=401, detail="Invalid admin key (X-Admin-Key).")
     api_key = generate_api_key()
-    company = Company(name=body.name, api_key_hash=hash_api_key(api_key))
+    company = Company(
+        name=body.name, api_key_hash=hash_api_key(api_key), site_key=generate_site_key()
+    )
     session.add(company)
     await session.commit()
-    return CompanyCreated(id=company.id, name=company.name, api_key=api_key)
+    return CompanyCreated(
+        id=company.id, name=company.name, api_key=api_key, site_key=company.site_key
+    )
+
+
+@router.put("/domains", response_model=DomainsResponse)
+async def set_allowed_domains(
+    body: DomainsUpdate, company: CompanyDep, session: SessionDep
+) -> DomainsResponse:
+    try:
+        company.allowed_domains = normalize_domains(body.domains)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return DomainsResponse(domains=company.allowed_domains)

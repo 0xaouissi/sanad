@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CompanyDep, SessionDep
+from app.api.deps import ChatCompanyDep, SessionDep
 from app.core.config import get_settings
 from app.db.models import Company
 from app.providers.embeddings import get_embedding_provider
@@ -39,7 +39,7 @@ async def _sse(
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
-    company: CompanyDep,
+    company: ChatCompanyDep,
     session: SessionDep,
     embedder: EmbedderDep,
     reranker: RerankerDep,

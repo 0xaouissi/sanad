@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    JSON,
     DateTime,
     Enum,
     ForeignKey,
@@ -37,6 +38,9 @@ class Company(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(200))
     api_key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # Public by design: embedded in customer pages, restricted by allowed_domains.
+    site_key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    allowed_domains: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     documents: Mapped[list["Document"]] = relationship(

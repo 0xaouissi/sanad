@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import structlog
 from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.api.health import router as health_router
@@ -38,6 +39,16 @@ def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
     app = FastAPI(title=settings.app_name, version=__version__, lifespan=lifespan)
+
+    # The widget runs on customer domains: any origin may call the API, but
+    # access is gated by X-Site-Key + the company's Origin allowlist (no cookies).
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.middleware("http")
     async def access_log(

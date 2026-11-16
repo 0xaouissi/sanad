@@ -53,6 +53,30 @@ async def init_db() -> None:
                     "ON chunks USING gin (to_tsvector('simple', content))"
                 )
             )
+            # create_all does not alter existing tables; add the Step 4 columns
+            # to databases created earlier (replaced by Alembic in Step 5).
+            await conn.execute(
+                text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS site_key VARCHAR(64)")
+            )
+            await conn.execute(
+                text(
+                    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS "
+                    "allowed_domains JSON NOT NULL DEFAULT '[]'"
+                )
+            )
+            await conn.execute(
+                text(
+                    "UPDATE companies SET site_key = "
+                    "'pk-' || replace(gen_random_uuid()::text, '-', '') "
+                    "WHERE site_key IS NULL"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_companies_site_key "
+                    "ON companies (site_key)"
+                )
+            )
     except (SQLAlchemyError, OSError) as exc:
         url = get_settings().database_url
         raise DatabaseUnavailableError(
