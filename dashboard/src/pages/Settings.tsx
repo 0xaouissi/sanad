@@ -14,6 +14,8 @@ export function SettingsPage({
   const [settings, setSettings] = useState<DashboardSettings | null>(null);
   const [domains, setDomains] = useState("");
   const [store, setStore] = useState(true);
+  const [handoffEmail, setHandoffEmail] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState("");
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [rotated, setRotated] = useState<{ api_key: string; site_key: string } | null>(null);
@@ -29,6 +31,8 @@ export function SettingsPage({
         setSettings(s);
         setDomains(s.allowed_domains.join("\n"));
         setStore(s.store_conversations);
+        setHandoffEmail(s.handoff_email ?? "");
+        setTelegramChatId(s.telegram_chat_id ?? "");
       })
       .catch(onError);
     if (isOwner) api.users().then(setUsers).catch(onError);
@@ -65,10 +69,14 @@ export function SettingsPage({
           .map((d) => d.trim())
           .filter(Boolean),
         store_conversations: store,
+        handoff_email: handoffEmail.trim(),
+        telegram_chat_id: telegramChatId.trim(),
       });
       setSettings(updated);
       setDomains(updated.allowed_domains.join("\n"));
       setStore(updated.store_conversations);
+      setHandoffEmail(updated.handoff_email ?? "");
+      setTelegramChatId(updated.telegram_chat_id ?? "");
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -149,6 +157,31 @@ export function SettingsPage({
             <label htmlFor="store-conversations">{t.storeConversations}</label>
           </div>
           <p className="muted">{t.storeHint}</p>
+          <h3>{t.humanHandoff}</h3>
+          <p className="muted">{t.handoffHint}</p>
+          <label htmlFor="handoff-email">{t.handoffEmailLabel}</label>
+          <input
+            id="handoff-email"
+            type="email"
+            dir="ltr"
+            value={handoffEmail}
+            disabled={!isOwner}
+            onChange={(e) => setHandoffEmail(e.target.value)}
+          />
+          <p className="muted">{settings.smtp_configured ? t.smtpReady : t.smtpMissing}</p>
+          <label htmlFor="telegram-chat-id">{t.telegramChatIdLabel}</label>
+          <input
+            id="telegram-chat-id"
+            type="text"
+            dir="ltr"
+            value={telegramChatId}
+            disabled={!isOwner}
+            onChange={(e) => setTelegramChatId(e.target.value)}
+          />
+          <p className="muted">
+            {settings.telegram_configured ? t.telegramReady : t.telegramMissing}
+          </p>
+          <p className="muted">{t.handoffStoreHint}</p>
           {isOwner && (
             <div className="row">
               <button className="primary" id="save-settings" type="submit">

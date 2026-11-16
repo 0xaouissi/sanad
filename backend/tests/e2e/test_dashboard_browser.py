@@ -5,8 +5,10 @@ needed — the dashboard never chats). Covers login + session persistence,
 document upload and delete through the UI, confirm dialogs on destructive
 actions, viewer read-only access, Arabic RTL / French labels, the
 settings page (snippet, domains, key rotation), the evaluation tab
-(golden counts per language, owner-only run button), and the website tab
-(crawl a local fixture site, crawled documents, delete, viewer read-only).
+(golden counts per language, owner-only run button), the website tab
+(crawl a local fixture site, crawled documents, delete, viewer read-only),
+and the handoffs tab (settings destinations, a real visitor request delivered
+to a local SMTP sink, viewer read-only).
 
 Run: PLAYWRIGHT_BROWSERS_PATH=... pytest -m e2e (see README).
 """
@@ -26,6 +28,7 @@ import httpx
 import pytest
 
 from tests.conftest import ENV_KEYS
+from tests.e2e.test_widget_browser import smtp_sink  # noqa: F401  (pytest fixture)
 
 _HF_HOME = os.environ.get("HF_HOME", "")
 _DATABASE_URL = os.environ.get(
@@ -52,7 +55,7 @@ def _free_port() -> int:
 
 
 @pytest.fixture(scope="module")
-def dashboard_server(tmp_path_factory):
+def dashboard_server(tmp_path_factory, smtp_sink):  # noqa: F811  (fixture)
     port = _free_port()
     base = f"http://127.0.0.1:{port}"
     env = {k: v for k, v in os.environ.items() if k not in ENV_KEYS}
@@ -70,6 +73,11 @@ def dashboard_server(tmp_path_factory):
             # The crawl test targets a loopback fixture site.
             "CRAWL_ALLOW_PRIVATE": "true",
             "CRAWL_RESYNC_HOURS": "0",
+            # Handoff email goes to the local sink; Telegram stays unconfigured.
+            "SMTP_HOST": "127.0.0.1",
+            "SMTP_PORT": str(smtp_sink.server_address[1]),
+            "SMTP_FROM": "dashboard@sanad.test",
+            "SMTP_STARTTLS": "false",
         }
     )
     if _HF_HOME:
@@ -477,3 +485,64 @@ async def test_website_tab_crawl_delete_and_viewer_read_only(
     await page.get_by_text("No crawl sources yet").wait_for(state="visible")
     await page.get_by_role("button", name="Documents", exact=True).click()
     await page.get_by_text("No documents yet").wait_for(state="visible")
+
+
+async def test_handoffs_tab_settings_and_viewer_read_only(page, dashboard_server):
+    base = dashboard_server["base"]
+    account = await create_company_with_owner(dashboard_server)
+    company = account["company"]
+    await login(page, base, account["email"], OWNER_PASSWORD)
+
+    # Owner sets the handoff destination and the widget domain in Settings.
+    await page.get_by_role("button", name="Settings", exact=True).click()
+    await page.locator("#handoff-email").fill("support@dashboard-e2e.example")
+    await page.locator("#allowed-domains").fill("localhost")
+    await page.get_by_text("SMTP server configured.").wait_for(state="visible")
+    await page.get_by_text("Telegram not configured").wait_for(state="visible")
+    await page.locator("#save-settings").click()
+    await page.get_by_text("Saved.").wait_for(state="visible")
+
+    # A visitor requests a human through the public API (site key + Origin).
+    async with httpx.AsyncClient(base_url=base, timeout=30, trust_env=False) as client:
+        response = await client.post(
+            "/api/v1/handoff",
+            json={
+                "email": "visitor@example.com",
+                "message": "Please call me back",
+                "website": "",
+                "opened_at": (time.time() - 10) * 1000,
+            },
+            headers={"X-Site-Key": company["site_key"], "Origin": "http://localhost"},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["email"] == "sent"
+        assert body["telegram"] == "skipped"
+        assert body["stored"] is True
+
+    await page.get_by_role("button", name="Handoffs").click()
+    row = page.locator("tr", has_text="visitor@example.com")
+    await row.wait_for(state="visible")
+    assert "Please call me back" in await row.inner_text()
+    assert await row.locator(".badge.ready").inner_text() == "sent"
+    assert await row.locator(".badge.pending").inner_text() == "skipped"
+
+    # Viewer sees the same handoffs but cannot edit settings.
+    viewer_email = account["email"].replace("owner", "viewer", 1)
+    me = await page.request.get(f"{base}/api/v1/auth/me")
+    csrf = (await me.json())["csrf_token"]
+    added = await page.request.post(
+        f"{base}/api/v1/dashboard/users",
+        data={"email": viewer_email, "password": VIEWER_PASSWORD},
+        headers={"X-CSRF-Token": csrf, "Content-Type": "application/json"},
+    )
+    assert added.status == 201, await added.text()
+    await page.get_by_role("button", name="Sign out").click()
+    await page.locator("#login-email").wait_for(state="visible")
+    await login(page, base, viewer_email, VIEWER_PASSWORD)
+    await page.get_by_role("button", name="Handoffs").click()
+    await page.locator("tr", has_text="visitor@example.com").wait_for(state="visible")
+    await page.get_by_role("button", name="Settings", exact=True).click()
+    assert await page.locator("#handoff-email").is_disabled()
+    assert await page.locator("#telegram-chat-id").is_disabled()
+    assert await page.locator("#save-settings").count() == 0

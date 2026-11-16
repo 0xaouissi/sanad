@@ -115,6 +115,26 @@ const en = {
   syncNow: "Sync now",
   statusCrawling: "crawling",
   confirmDeleteSource: "Delete this crawl source and all documents crawled from it?",
+  handoffs: "Handoffs",
+  noHandoffs: "No handoff requests yet. Visitors can ask for a human in the widget.",
+  message: "Message",
+  channelEmail: "Email channel",
+  channelTelegram: "Telegram",
+  statusSent: "sent",
+  statusSkipped: "skipped",
+  humanHandoff: "Human handoff",
+  handoffEmailLabel: "Support email (handoff destination)",
+  telegramChatIdLabel: "Telegram chat id",
+  handoffHint:
+    "Visitors can request a human from the widget. Requests go to these destinations; the server's SMTP and Telegram credentials stay in environment variables.",
+  smtpReady: "SMTP server configured.",
+  smtpMissing:
+    "SMTP not configured: set SMTP_HOST and SMTP_FROM in the server environment to deliver emails.",
+  telegramReady: "Telegram bot configured.",
+  telegramMissing:
+    "Telegram not configured: set TELEGRAM_BOT_TOKEN in the server environment to deliver Telegram messages.",
+  handoffStoreHint:
+    "When “Store conversations” is off, requests are still delivered but not saved here.",
 };
 
 export type Dict = typeof en;
@@ -228,6 +248,26 @@ const fr: Dict = {
   syncNow: "Synchroniser",
   statusCrawling: "exploration",
   confirmDeleteSource: "Supprimer cette source et tous les documents explorés depuis celle-ci ?",
+  handoffs: "Demandes de contact",
+  noHandoffs: "Aucune demande de contact. Les visiteurs peuvent demander un humain dans le widget.",
+  message: "Message",
+  channelEmail: "Canal e-mail",
+  channelTelegram: "Telegram",
+  statusSent: "envoyé",
+  statusSkipped: "ignoré",
+  humanHandoff: "Contact humain",
+  handoffEmailLabel: "E-mail de support (destination des demandes)",
+  telegramChatIdLabel: "Identifiant de chat Telegram",
+  handoffHint:
+    "Les visiteurs peuvent demander un humain depuis le widget. Les demandes sont envoyées à ces destinations ; les identifiants SMTP et Telegram du serveur restent dans les variables d'environnement.",
+  smtpReady: "Serveur SMTP configuré.",
+  smtpMissing:
+    "SMTP non configuré : définissez SMTP_HOST et SMTP_FROM dans l'environnement du serveur pour envoyer les e-mails.",
+  telegramReady: "Bot Telegram configuré.",
+  telegramMissing:
+    "Telegram non configuré : définissez TELEGRAM_BOT_TOKEN dans l'environnement du serveur pour envoyer les messages Telegram.",
+  handoffStoreHint:
+    "Si « Enregistrer les conversations » est désactivé, les demandes sont quand même envoyées mais pas sauvegardées ici.",
 };
 
 const ar: Dict = {
@@ -338,6 +378,24 @@ const ar: Dict = {
   syncNow: "مزامنة الآن",
   statusCrawling: "جارٍ الزحف",
   confirmDeleteSource: "حذف مصدر الزحف هذا وكل الوثائق المستخرجة منه؟",
+  handoffs: "طلبات التواصل",
+  noHandoffs: "لا توجد طلبات تواصل بعد. يمكن للزوار طلب موظف عبر الودجت.",
+  message: "الرسالة",
+  channelEmail: "قناة البريد",
+  channelTelegram: "Telegram",
+  statusSent: "أُرسل",
+  statusSkipped: "تم تخطيه",
+  humanHandoff: "التواصل مع موظف",
+  handoffEmailLabel: "البريد الإلكتروني للدعم (وجهة الطلبات)",
+  telegramChatIdLabel: "معرّف محادثة Telegram",
+  handoffHint:
+    "يمكن للزوار طلب موظف عبر الودجت. تُرسل الطلبات إلى هذه الوجهات؛ تبقى بيانات SMTP وTelegram في متغيرات البيئة على الخادم.",
+  smtpReady: "خادم SMTP مضبوط.",
+  smtpMissing: "SMTP غير مضبوط: اضبط SMTP_HOST وSMTP_FROM في بيئة الخادم لإرسال الرسائل.",
+  telegramReady: "بوت Telegram مضبوط.",
+  telegramMissing:
+    "Telegram غير مضبوط: اضبط TELEGRAM_BOT_TOKEN في بيئة الخادم لإرسال رسائل Telegram.",
+  handoffStoreHint: "عند تعطيل «حفظ المحادثات» تُرسل الطلبات لكن لا تُحفظ هنا.",
 };
 
 export const DICTS: Record<Lang, Dict> = { en, fr, ar };

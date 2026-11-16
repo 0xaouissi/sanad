@@ -4,12 +4,20 @@ import { DICTS, LANGS, Lang, initialLang } from "./i18n";
 import { Documents } from "./pages/Documents";
 import { Crawl } from "./pages/Crawl";
 import { Evaluation } from "./pages/Evaluation";
+import { Handoffs } from "./pages/Handoffs";
 import { Login } from "./pages/Login";
 import { Questions } from "./pages/Questions";
 import { Ratings } from "./pages/Ratings";
 import { SettingsPage } from "./pages/Settings";
 
-type Page = "documents" | "website" | "questions" | "ratings" | "evaluation" | "settings";
+type Page =
+  | "documents"
+  | "website"
+  | "questions"
+  | "ratings"
+  | "handoffs"
+  | "evaluation"
+  | "settings";
 
 export function App() {
   const [lang, setLang] = useState<Lang>(initialLang);
@@ -76,6 +84,7 @@ export function App() {
     { id: "website", label: t.website },
     { id: "questions", label: t.questions },
     { id: "ratings", label: t.ratings },
+    { id: "handoffs", label: t.handoffs },
     { id: "evaluation", label: t.evaluation },
     { id: "settings", label: t.settings },
   ];
@@ -117,6 +126,7 @@ export function App() {
       {page === "website" && <Crawl t={t} lang={lang} isOwner={isOwner} onError={onError} />}
       {page === "questions" && <Questions t={t} lang={lang} onError={onError} />}
       {page === "ratings" && <Ratings t={t} lang={lang} onError={onError} />}
+      {page === "handoffs" && <Handoffs t={t} lang={lang} onError={onError} />}
       {page === "evaluation" && <Evaluation t={t} isOwner={isOwner} onError={onError} />}
       {page === "settings" && <SettingsPage t={t} isOwner={isOwner} onError={onError} />}
     </div>

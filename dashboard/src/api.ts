@@ -42,6 +42,21 @@ export interface DashboardSettings {
   site_key: string;
   allowed_domains: string[];
   store_conversations: boolean;
+  handoff_email: string | null;
+  telegram_chat_id: string | null;
+  smtp_configured: boolean;
+  telegram_configured: boolean;
+}
+
+export interface HandoffItem {
+  id: string;
+  email: string;
+  message: string;
+  language: string | null;
+  email_status: "sent" | "failed" | "skipped";
+  telegram_status: "sent" | "failed" | "skipped";
+  error: string | null;
+  created_at: string;
 }
 
 export interface UserOut {
@@ -155,8 +170,15 @@ export const api = {
   failedQuestions: () => request<FailedQuestion[]>("GET", "/api/v1/dashboard/failed-questions"),
   ratings: () => request<RatingsSummary>("GET", "/api/v1/dashboard/ratings"),
   settings: () => request<DashboardSettings>("GET", "/api/v1/dashboard/settings"),
-  updateSettings: (patch: Partial<Pick<DashboardSettings, "allowed_domains" | "store_conversations">>) =>
-    request<DashboardSettings>("PUT", "/api/v1/dashboard/settings", patch),
+  updateSettings: (
+    patch: Partial<
+      Pick<
+        DashboardSettings,
+        "allowed_domains" | "store_conversations" | "handoff_email" | "telegram_chat_id"
+      >
+    >
+  ) => request<DashboardSettings>("PUT", "/api/v1/dashboard/settings", patch),
+  handoffs: () => request<HandoffItem[]>("GET", "/api/v1/dashboard/handoffs"),
   rotateKeys: () =>
     request<{ api_key: string; site_key: string }>("POST", "/api/v1/dashboard/keys/rotate"),
   deleteConversations: () =>
