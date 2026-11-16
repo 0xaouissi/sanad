@@ -3,16 +3,34 @@ from typing import Annotated
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.security import (
     company_for_api_key,
     company_for_site_key,
     domain_allowed,
+    keys_match,
     origin_host,
 )
 from app.db.models import Company
 from app.db.session import get_session
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+async def require_admin(
+    x_admin_key: Annotated[str | None, Header()] = None,
+) -> None:
+    admin_key = get_settings().admin_api_key
+    if not admin_key:
+        raise HTTPException(
+            status_code=503,
+            detail="This endpoint is disabled: set ADMIN_API_KEY in .env and restart.",
+        )
+    if not x_admin_key or not keys_match(x_admin_key, admin_key):
+        raise HTTPException(status_code=401, detail="Invalid admin key (X-Admin-Key).")
+
+
+AdminDep = Annotated[None, Depends(require_admin)]
 
 
 async def get_current_company(
