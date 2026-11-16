@@ -1,3 +1,4 @@
+import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
@@ -12,10 +13,12 @@ from app.api.v1.documents import (
     reindex_document,
     upload_document,
 )
+from app.core.config import get_settings
 from app.core.passwords import hash_password
 from app.core.security import generate_api_key, generate_site_key, hash_api_key
 from app.db.models import (
     Conversation,
+    CrawlSource,
     DashboardUser,
     Document,
     DocumentStatus,
@@ -25,7 +28,9 @@ from app.db.models import (
 )
 from app.eval.golden import golden_summary
 from app.providers.kv import get_kv_store
+from app.rag.crawl import CrawlError
 from app.schemas.auth import UserCreate, UserResponse
+from app.schemas.crawl import CrawlSourceCreate, CrawlSourceOut
 from app.schemas.dashboard import (
     DashboardSettings,
     DeletedCount,
@@ -36,7 +41,10 @@ from app.schemas.dashboard import (
     SettingsUpdate,
 )
 from app.schemas.document import DocumentAccepted, DocumentOut
+from app.services.answer_cache import bump_doc_epoch
+from app.services.crawler import check_source_url, crawl_in_progress, crawl_source
 from app.services.evaluation import get_eval_state, run_evaluation, start_eval
+from app.services.ingestion import document_path
 from app.services.rag_chat import is_no_answer
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -363,3 +371,87 @@ async def eval_state(auth: DashboardAuthDep, session: SessionDep) -> dict:
     )
     state["documents_ready"] = all(name in ready for name in golden_summary()["documents"])
     return state
+
+
+# Website crawler (Step 6b): SSRF-guarded, same-domain crawling with re-sync.
+
+
+async def _get_owned_source(auth: OwnerDep, session: SessionDep, source_id: UUID) -> CrawlSource:
+    source = await session.get(CrawlSource, source_id)
+    if source is None or source.company_id != auth.company.id:
+        raise HTTPException(status_code=404, detail="Crawl source not found.")
+    return source
+
+
+@router.get("/crawl-sources", response_model=list[CrawlSourceOut])
+async def list_crawl_sources(auth: DashboardAuthDep, session: SessionDep) -> list[CrawlSource]:
+    result = await session.scalars(
+        select(CrawlSource)
+        .where(CrawlSource.company_id == auth.company.id)
+        .order_by(CrawlSource.created_at.desc())
+    )
+    return list(result)
+
+
+@router.post("/crawl-sources", response_model=CrawlSourceOut, status_code=202)
+async def add_crawl_source(
+    body: CrawlSourceCreate,
+    auth: OwnerDep,
+    session: SessionDep,
+    background: BackgroundTasks,
+    _: CsrfDep,
+) -> CrawlSource:
+    try:
+        url = await asyncio.to_thread(check_source_url, body.url, get_settings())
+    except CrawlError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    existing = await session.scalar(
+        select(CrawlSource).where(
+            CrawlSource.company_id == auth.company.id, CrawlSource.url == url
+        )
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="This URL is already a crawl source. Use Sync to refresh it.",
+        )
+    source = CrawlSource(company_id=auth.company.id, url=url)
+    session.add(source)
+    await session.commit()
+    await session.refresh(source)
+    background.add_task(crawl_source, source.id)
+    return source
+
+
+@router.post("/crawl-sources/{source_id}/sync", response_model=CrawlSourceOut, status_code=202)
+async def sync_crawl_source(
+    auth: OwnerDep,
+    session: SessionDep,
+    background: BackgroundTasks,
+    source_id: UUID,
+    _: CsrfDep,
+) -> CrawlSource:
+    source = await _get_owned_source(auth, session, source_id)
+    if crawl_in_progress(source):
+        raise HTTPException(
+            status_code=409,
+            detail="A crawl is already running for this source. Wait for it to finish.",
+        )
+    background.add_task(crawl_source, source.id)
+    return source
+
+
+@router.delete("/crawl-sources/{source_id}", status_code=204)
+async def delete_crawl_source(
+    auth: OwnerDep, session: SessionDep, source_id: UUID, _: CsrfDep
+) -> None:
+    source = await _get_owned_source(auth, session, source_id)
+    docs = list(
+        await session.scalars(select(Document).where(Document.crawl_source_id == source.id))
+    )
+    paths = [document_path(source.company_id, d.id, d.filename) for d in docs]
+    await session.delete(source)
+    await session.commit()
+    for path in paths:
+        path.unlink(missing_ok=True)
+    await bump_doc_epoch(get_kv_store(), source.company_id)

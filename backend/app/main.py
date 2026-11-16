@@ -1,6 +1,7 @@
+import asyncio
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from uuid import uuid4
 
@@ -27,6 +28,7 @@ from app.providers.embeddings import get_embedding_provider
 from app.providers.kv import close_kv, init_kv
 from app.providers.llm import get_llm_provider
 from app.providers.reranker import get_rerank_provider
+from app.services.crawler import resync_loop
 
 log = structlog.get_logger()
 
@@ -35,7 +37,15 @@ log = structlog.get_logger()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_db()
     await init_kv()
+    settings = get_settings()
+    resync_task = (
+        asyncio.create_task(resync_loop()) if settings.crawl_resync_hours > 0 else None
+    )
     yield
+    if resync_task is not None:
+        resync_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await resync_task
     await get_llm_provider().aclose()
     await get_embedding_provider().aclose()
     reranker = get_rerank_provider()
