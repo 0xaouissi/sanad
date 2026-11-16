@@ -10,6 +10,11 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-sanad}:${POSTGRES_PASSWORD:-sanad}@db:5432/${POSTGRES_DB:-sanad}
       REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+      HF_HOME: /models/hf
+    volumes:
+      - uploads:/data
+      - hf-cache:/models/hf
     ports:
       - "8000:8000"
     depends_on:
@@ -84,3 +89,5 @@ services:
 volumes:
   pgdata:
   ollama:
+  uploads:
+  hf-cache:

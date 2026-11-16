@@ -12,7 +12,7 @@ bot answers **only** from the documents the company uploaded — with sources.
   React SPA dashboard (Vite) · one `docker compose up` command.
 - License: MIT.
 
-> Status: **Step 1 — FastAPI + Ollama chat with streaming**. Working project name.
+> Status: **Step 2 — document ingestion + multilingual similarity search**. Working project name.
 
 ## Quick start (Docker, one command)
 
@@ -42,6 +42,51 @@ Streaming (server-sent events): add `"stream": true` to the same request.
 If Ollama is down or the model is missing, the API returns **503 with a
 message that tells you exactly what to run** (e.g. `ollama pull …`).
 
+## Documents and search (Step 2)
+
+Companies are isolated by API key. Create one with the admin key
+(`ADMIN_API_KEY` in `.env`), then upload documents and search:
+
+```bash
+# 1. Create a company (admin). The returned api_key is shown only once.
+curl -X POST http://localhost:8000/api/v1/companies \
+  -H "X-Admin-Key: $ADMIN_API_KEY" -H "Content-Type: application/json" \
+  -d '{"name": "Acme"}'
+
+# 2. Upload a document (PDF, DOCX, TXT, MD — or PNG/JPG with OCR installed).
+#    Returns 202 immediately; ingestion runs in the background.
+curl -X POST http://localhost:8000/api/v1/documents \
+  -H "X-API-Key: $API_KEY" -F "file=@policy.pdf"
+
+# 3. Check status (pending -> processing -> ready | failed + reason).
+curl http://localhost:8000/api/v1/documents -H "X-API-Key: $API_KEY"
+
+# 4. Similarity search in Arabic, French or English (BGE-M3, pgvector HNSW).
+curl -X POST http://localhost:8000/api/v1/search \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"query": "كم يوما لدي لطلب استرجاع المبلغ؟", "top_k": 5}'
+```
+
+Also available: `DELETE /api/v1/documents/{id}` and
+`POST /api/v1/documents/{id}/reindex`. Re-uploading identical content is
+detected (SHA-256 per company) and skipped. `GET /health/db` checks
+PostgreSQL + pgvector.
+
+Ingestion pipeline: extract text per page/heading (pypdf, python-docx) →
+repair visual-order Arabic from PDFs → clean → normalize Arabic (alef
+variants, diacritics, tatweel) → overlapping chunks (filename + page +
+heading kept) → BGE-M3 embeddings → pgvector. Scanned PDFs and images go
+through Tesseract OCR when the `ocr` extras are installed.
+
+Embeddings setup (native dev): install CPU torch first to avoid the 2.5 GB
+CUDA download, then the extras and weights:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -e ".[embeddings,ocr]"
+huggingface-cli download BAAI/bge-m3   # ~2.3 GB, cached under HF_HOME
+```
+
 ## Native development (no Docker)
 
 1. Install [Ollama](https://ollama.com/download) and pull the small-tier model:
@@ -63,10 +108,16 @@ or `.env` (Docker). Every setting is documented there.
 
 ```bash
 cd backend
-.venv/Scripts/python.exe -m pytest -q        # unit tests (offline, mocked providers)
-.venv/Scripts/python.exe -m pytest -m e2e    # live E2E: ar/fr/en against real Ollama
+.venv/Scripts/python.exe -m pytest -q                 # unit tests (offline, mocked providers)
+.venv/Scripts/python.exe -m pytest -m integration     # real PostgreSQL + pgvector (fake embeddings)
+.venv/Scripts/python.exe -m pytest -m e2e             # live: real Ollama + BGE-M3, ar/fr/en upload->search
 .venv/Scripts/python.exe -m ruff check app tests
 ```
+
+Integration/E2E tests need PostgreSQL with pgvector and the `sanad` database
+(default `DATABASE_URL`; override with `TEST_DATABASE_URL`). They skip with a
+clear message when a dependency is missing. The OCR E2E also needs
+`TESSERACT_CMD` and `TESSDATA_PREFIX` set.
 
 ## Hardware tiers
 
@@ -99,7 +150,7 @@ Each step ships with tests, docs and small commits.
 
 0. **Hardware tiers** — tier defaults, env overrides, CPU-only mode *(done)*
 1. **Project setup, FastAPI and Ollama** — health, structured logging, provider interface, streaming chat, Docker Compose *(done)*
-2. **Documents, chunking, multilingual embeddings** — multi-company isolation, PDF/DOCX/TXT/MD upload, OCR, Arabic normalization, pgvector, background ingestion
+2. **Documents, chunking, multilingual embeddings** — multi-company isolation, PDF/DOCX/TXT/MD upload, OCR, Arabic normalization, pgvector, background ingestion *(done)*
 3. **Retrieval, the "I don't know" rule, language detection** — hybrid search + rerank, citations, conversation memory, latency targets
 4. **The embeddable widget** — one script tag, Shadow DOM, RTL, themes, ratings
 5. **Protection, speed, admin dashboard** — rate limits, cache, prompt-injection defense, roles, privacy, metrics, migrations
