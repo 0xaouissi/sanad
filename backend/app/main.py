@@ -17,6 +17,7 @@ from app.core.logging import configure_logging
 from app.db.session import dispose_db, init_db
 from app.providers.embeddings import get_embedding_provider
 from app.providers.llm import get_llm_provider
+from app.providers.reranker import get_rerank_provider
 
 log = structlog.get_logger()
 
@@ -27,6 +28,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
     await get_llm_provider().aclose()
     await get_embedding_provider().aclose()
+    reranker = get_rerank_provider()
+    if reranker is not None:
+        await reranker.aclose()
     await dispose_db()
 
 

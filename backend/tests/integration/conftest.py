@@ -19,6 +19,7 @@ from app.main import create_app
 from app.providers.embeddings import get_embedding_provider
 from app.providers.embeddings.base import EmbeddingProvider
 from app.providers.llm import get_llm_provider
+from app.providers.reranker import get_rerank_provider
 
 ADMIN_KEY = "test-admin-key"
 
@@ -79,6 +80,7 @@ async def db_ready(monkeypatch: MonkeyPatch, tmp_path) -> AsyncIterator[None]:
     get_settings.cache_clear()
     get_embedding_provider.cache_clear()
     get_llm_provider.cache_clear()
+    get_rerank_provider.cache_clear()
 
 
 @pytest.fixture

@@ -15,6 +15,7 @@ from app.db.session import dispose_db, get_session_factory, init_db
 from app.main import create_app
 from app.providers.embeddings import get_embedding_provider
 from app.providers.llm import get_llm_provider
+from app.providers.reranker import get_rerank_provider
 
 ADMIN_KEY = "e2e-admin-key"
 
@@ -84,6 +85,7 @@ async def live_rag(monkeypatch: MonkeyPatch, tmp_path) -> AsyncIterator[AsyncCli
     get_settings.cache_clear()
     get_embedding_provider.cache_clear()
     get_llm_provider.cache_clear()
+    get_rerank_provider.cache_clear()
 
 
 async def make_company(client: AsyncClient, name: str = "E2E Co") -> dict:
