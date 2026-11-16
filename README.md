@@ -12,7 +12,7 @@ bot answers **only** from the documents the company uploaded — with sources.
   React SPA dashboard (Vite) · one `docker compose up` command.
 - License: MIT.
 
-> Status: **Step 5a — protection, cache, migrations and metrics**. Working project name.
+> Status: **Step 5b — admin dashboard**. Working project name.
 
 ## Quick start (Docker, one command)
 
@@ -262,6 +262,56 @@ curl http://localhost:8000/api/v1/metrics -H "X-Admin-Key: $ADMIN_API_KEY"
 
 All Step 5a settings are documented in [.env.example](.env.example).
 
+## Admin dashboard (Step 5b)
+
+A React SPA served by the backend at **`/dashboard/`** — the built bundle is
+committed, so no Node.js is needed to run it. English, French and Arabic
+(Arabic switches the whole interface to RTL); the choice is remembered.
+
+Create a company **with an owner account** to sign in:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/companies \
+  -H "X-Admin-Key: $ADMIN_API_KEY" -H "Content-Type: application/json" \
+  -d '{"name": "Acme", "owner_email": "you@acme.com", "owner_password": "a-long-password"}'
+```
+
+Then open `http://localhost:8000/dashboard/` and sign in. Pages:
+
+- **Documents** — upload, live status badges, reindex, delete.
+- **Failed questions** — what the bot refused, with language and date.
+- **Ratings** — visitor thumbs up/down with the question and answer.
+- **Settings** — the widget snippet (copy button), allowed domains, the
+  conversation-storage privacy toggle, key rotation, JSON export,
+  delete-all-conversations, and team management.
+
+Security:
+
+- Passwords are hashed with **scrypt** (stdlib, salted); plaintext is never
+  stored. Login is rate-limited per IP (`LOGIN_RATE_LIMIT_PER_MINUTE`,
+  default 10, `0` disables) and returns 429 + `Retry-After`.
+- Sessions use an **httpOnly, SameSite=Lax cookie** backed by the KV store
+  (Redis or memory), expiring after `DASHBOARD_SESSION_HOURS` (default 12).
+  Every mutation requires the session's **CSRF token** in `X-CSRF-Token`;
+  without it the API returns 403. Set `COOKIE_SECURE=true` behind HTTPS.
+- **Roles are enforced server-side**: the owner manages everything; viewers
+  (added from Settings) are read-only — the UI hides mutation controls and
+  the API rejects them with 403 regardless.
+- Every destructive action (delete document, reindex, rotate keys, delete
+  all conversations) asks for confirmation in the interface.
+- **Key rotation** issues a new secret `sk-…` and public `pk-…` key at once;
+  the old keys stop working immediately and the new secret is shown only
+  once. Update the widget snippet after rotating.
+- **Privacy toggle**: with *Store conversations* off, chats are still
+  answered but nothing is persisted — no history, failed questions, ratings
+  or cache — and chat responses carry null conversation/message ids.
+- **Export** downloads all company data as JSON (no keys, no password
+  hashes); **delete-all-conversations** removes messages and ratings too.
+
+Development: `cd dashboard && npm install && npm run dev` (Vite on :5173,
+proxies the API). `npm run build` type-checks and rebuilds the committed
+bundle. See [dashboard/README.md](dashboard/README.md).
+
 ## Native development (no Docker)
 
 1. Install [Ollama](https://ollama.com/download) and pull the small-tier model:
@@ -321,24 +371,28 @@ Integration/E2E tests need PostgreSQL with pgvector and the `sanad` database
 clear message when a dependency is missing. The OCR E2E also needs
 `TESSERACT_CMD` and `TESSDATA_PREFIX` set.
 
-### Widget browser tests (real Chromium)
+### Browser tests (real Chromium)
 
-Eleven Playwright tests drive the widget on a blank HTML page served from a
-local site: Arabic RTL, mobile viewport, citation popovers, thumbs-up
-persisted to the database, manual French, custom colors/logo/welcome/theme,
-XSS from a malicious document, rejection from a non-allowed domain, and the
-bot check (hidden honeypot field, filled-honeypot rejection).
+Sixteen Playwright tests drive real pages. **Widget (11):** Arabic RTL,
+mobile viewport, citation popovers, thumbs-up persisted to the database,
+manual French, custom colors/logo/welcome/theme, XSS from a malicious
+document, rejection from a non-allowed domain, and the bot check (hidden
+honeypot field, filled-honeypot rejection). **Dashboard (5):** login with
+wrong-password error and cookie-session persistence, document upload and
+delete through the UI, confirm dialogs (dismiss keeps, accept deletes),
+viewer read-only access added through the UI, Arabic RTL / French labels,
+and settings (snippet, domains save, key-rotation confirm).
 
 ```bash
 pip install -e ".[browser]"
 python -m playwright install chromium        # or set PLAYWRIGHT_BROWSERS_PATH to an existing install
-.venv/Scripts/python.exe -m pytest tests/e2e/test_widget_browser.py -m e2e -v
+.venv/Scripts/python.exe -m pytest tests/e2e/test_widget_browser.py tests/e2e/test_dashboard_browser.py -m e2e -v
 ```
 
 They need the same live stack as the other E2E tests (Ollama + BGE-M3 +
-PostgreSQL); each test starts its own API server on a free port, so nothing
-else has to be running. Skips with an install hint when Playwright or the
-browser is missing.
+PostgreSQL; the dashboard tests alone need no LLM); each test starts its own
+API server on a free port, so nothing else has to be running. Skips with an
+install hint when Playwright or the browser is missing.
 
 ## Hardware tiers
 
@@ -376,7 +430,7 @@ Each step ships with tests, docs and small commits.
 4. **The embeddable widget** — one script tag, Shadow DOM, RTL, themes, ratings *(done)*
 5. **Protection, speed, admin dashboard** — split in two:
    - **5a** *(done)*: rate limits per IP/site, daily company cap, widget bot check, Redis answer cache with in-memory fallback, prompt-injection defense, Alembic migrations, Prometheus metrics
-   - **5b**: React dashboard — login, roles, documents, failed questions, ratings, privacy controls, data export and deletion
+   - **5b** *(done)*: React dashboard — scrypt login with rate limiting, httpOnly cookie sessions + CSRF, owner/viewer roles, documents, failed questions, ratings, settings (snippet, domains, key rotation), privacy toggle, data export and deletion, ar/fr/en RTL interface
 6. **Evaluation page, website crawling, human handoff** — per-language accuracy scores, scheduled re-sync, email/Telegram handoff
 7. **Documentation, demo and release** — demo GIF/video, CI, live demo, first release
 
