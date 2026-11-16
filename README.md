@@ -12,7 +12,7 @@ bot answers **only** from the documents the company uploaded — with sources.
   React SPA dashboard (Vite) · one `docker compose up` command.
 - License: MIT.
 
-> Status: **Step 3 — grounded answers, citations, "I don't know" rule**. Working project name.
+> Status: **Step 4 — embeddable widget, public site keys, feedback**. Working project name.
 
 ## Quick start (Docker, one command)
 
@@ -36,9 +36,10 @@ curl http://localhost:8000/health/llm
 curl http://localhost:8000/health/db
 ```
 
-Chat answers **only from your uploaded documents** and needs a company API
-key — create a company, upload a policy file, then ask questions in Arabic,
-French or English: see [Grounded chat](#grounded-chat-step-3) below.
+Chat answers **only from your uploaded documents** — create a company, upload
+a policy file, then ask questions in Arabic, French or English: see
+[Grounded chat](#grounded-chat-step-3) below. To embed the chat widget on a
+website, use the public site key: see [the widget](#the-embeddable-widget-step-4).
 If Ollama is down or the model is missing, the API returns **503 with a
 message that tells you exactly what to run** (e.g. `ollama pull …`).
 
@@ -91,7 +92,9 @@ huggingface-cli download BAAI/bge-m3   # ~2.3 GB, cached under HF_HOME
 
 `POST /api/v1/chat` answers **only from the company's documents**, in the
 visitor's language (Arabic, French or English — auto-detected, or forced with
-`"language": "ar"|"fr"|"en"`). Requires the company `X-API-Key`.
+`"language": "ar"|"fr"|"en"`). Server-side: send the company `X-API-Key`.
+From a browser: send the public `X-Site-Key` + an allowed `Origin` (see
+[the widget](#the-embeddable-widget-step-4)).
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/chat \
@@ -99,8 +102,8 @@ curl -X POST http://localhost:8000/api/v1/chat \
   -d '{"message": "Combien de jours pour un remboursement ?"}'
 ```
 
-Response: `answer`, `language`, `conversation_id`, `citations` (filename,
-page, heading, chunk id), `model`, `provider`.
+Response: `answer`, `language`, `conversation_id`, `message_id`, `citations`
+(filename, page, heading, chunk id), `model`, `provider`.
 
 How it works:
 
@@ -125,8 +128,63 @@ How it works:
   (`chat_latency`) against the tier budget: ≤8 s small, ≤3 s medium/large.
 
 Streaming: add `"stream": true`. Server-sent events are `token` chunks, then
-a final `done` event carrying `conversation_id`, `language` and `citations`
-(or an `error` event with an actionable detail).
+a final `done` event carrying `conversation_id`, `language`, `message_id` and
+`citations` (or an `error` event with an actionable detail).
+
+## The embeddable widget (Step 4)
+
+One script tag on any website — no build step, no dependencies, Shadow DOM so
+the host page's CSS can't break it (and vice versa):
+
+```html
+<script src="http://localhost:8000/widget.js" data-site-key="pk-…" defer></script>
+```
+
+The widget uses a **public site key**, never the secret company API key. Each
+company gets a `pk-…` key at creation (also returned by
+`POST /api/v1/companies`). The site key only works on the company's **allowed
+domains** — set them once with the secret key:
+
+```bash
+curl -X PUT http://localhost:8000/api/v1/companies/domains \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"domains": ["example.com", "*.example.com"]}'
+```
+
+`*.example.com` matches subdomains only, not the apex — list both if needed.
+Requests from other origins (or with no `Origin` header) get **403 with a
+message explaining how to fix it**. The secret key still works everywhere for
+server-side use and is required for documents, search and domain management;
+the site key is rejected on those endpoints.
+
+Configuration via `data-*` attributes on the script tag:
+
+| Attribute | Default | Meaning |
+|-----------|---------|---------|
+| `data-site-key` | — | **Required.** The company's public `pk-…` key |
+| `data-api-url` | script origin | Backend base URL (when served from a CDN) |
+| `data-color` | `#2563eb` | Accent color (validated; falls back if invalid) |
+| `data-logo` | none | Header logo URL (`http(s)` only) |
+| `data-welcome` | localized greeting | First message shown when the panel opens |
+| `data-lang` | `auto` | `auto` detects the visitor's language; `ar`/`fr`/`en` force it. A dropdown in the header lets visitors switch at any time |
+| `data-theme` | `auto` | `auto` follows the OS setting; `light`/`dark` force it |
+
+With `data-lang="auto"` the answer language always matches the question.
+On the small tier, answers are most reliable when the documents, the question
+and the answer share a language; mixing languages (e.g. asking in French
+about English documents, or forcing a different answer language) can
+occasionally give weak answers — medium/large tiers handle this better.
+
+Features: floating button, streaming answers with a typing indicator,
+clickable citation chips (filename, page, heading), thumbs up/down per answer
+(`POST /api/v1/feedback`, one rating per message), full RTL for Arabic,
+full-screen panel on mobile, light/dark themes, Escape to close, `aria-live`
+messages.
+
+**Safety:** answers are rendered with `textContent` only — no `innerHTML`, no
+raw HTML anywhere in the widget. A malicious document containing
+`<script>`/`<img onerror=…>` is displayed as literal text and cannot execute
+(covered by a real-browser XSS test). Logo URLs are restricted to `http(s)`.
 
 ## Native development (no Docker)
 
@@ -186,6 +244,24 @@ Integration/E2E tests need PostgreSQL with pgvector and the `sanad` database
 clear message when a dependency is missing. The OCR E2E also needs
 `TESSERACT_CMD` and `TESSDATA_PREFIX` set.
 
+### Widget browser tests (real Chromium)
+
+Nine Playwright tests drive the widget on a blank HTML page served from a
+local site: Arabic RTL, mobile viewport, citation popovers, thumbs-up
+persisted to the database, manual French, custom colors/logo/welcome/theme,
+XSS from a malicious document, and rejection from a non-allowed domain.
+
+```bash
+pip install -e ".[browser]"
+python -m playwright install chromium        # or set PLAYWRIGHT_BROWSERS_PATH to an existing install
+.venv/Scripts/python.exe -m pytest tests/e2e/test_widget_browser.py -m e2e -v
+```
+
+They need the same live stack as the other E2E tests (Ollama + BGE-M3 +
+PostgreSQL); each test starts its own API server on a free port, so nothing
+else has to be running. Skips with an install hint when Playwright or the
+browser is missing.
+
 ## Hardware tiers
 
 One setting adapts the stack to the machine. Full details and the environment
@@ -219,7 +295,7 @@ Each step ships with tests, docs and small commits.
 1. **Project setup, FastAPI and Ollama** — health, structured logging, provider interface, streaming chat, Docker Compose *(done)*
 2. **Documents, chunking, multilingual embeddings** — multi-company isolation, PDF/DOCX/TXT/MD upload, OCR, Arabic normalization, pgvector, background ingestion *(done)*
 3. **Retrieval, the "I don't know" rule, language detection** — hybrid search + rerank, citations, conversation memory, latency targets *(done)*
-4. **The embeddable widget** — one script tag, Shadow DOM, RTL, themes, ratings
+4. **The embeddable widget** — one script tag, Shadow DOM, RTL, themes, ratings *(done)*
 5. **Protection, speed, admin dashboard** — rate limits, cache, prompt-injection defense, roles, privacy, metrics, migrations
 6. **Evaluation page, website crawling, human handoff** — per-language accuracy scores, scheduled re-sync, email/Telegram handoff
 7. **Documentation, demo and release** — demo GIF/video, CI, live demo, first release
