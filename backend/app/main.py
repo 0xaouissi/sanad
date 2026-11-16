@@ -8,6 +8,7 @@ import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app.api.health import router as health_router
@@ -91,6 +92,12 @@ def create_app() -> FastAPI:
     @app.get("/widget.js", include_in_schema=False)
     async def widget_script() -> FileResponse:
         return FileResponse(widget_path, media_type="application/javascript")
+
+    # Built dashboard SPA (dashboard/ → npm run build). Absent in source-only
+    # checkouts; the API still works without it.
+    dashboard_dir = Path(__file__).parent / "static" / "dashboard"
+    if dashboard_dir.is_dir():
+        app.mount("/dashboard", StaticFiles(directory=dashboard_dir, html=True), name="dashboard")
 
     return app
 
