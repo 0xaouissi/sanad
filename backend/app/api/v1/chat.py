@@ -11,6 +11,8 @@ from app.core.config import get_settings
 from app.db.models import Company
 from app.providers.embeddings import get_embedding_provider
 from app.providers.embeddings.base import EmbeddingError, EmbeddingProvider
+from app.providers.kv import get_kv_store
+from app.providers.kv.base import KVStore
 from app.providers.llm import get_llm_provider
 from app.providers.llm.base import LLMError, LLMProvider, LLMUnavailableError
 from app.providers.reranker import get_rerank_provider
@@ -23,6 +25,7 @@ router = APIRouter(tags=["chat"])
 EmbedderDep = Annotated[EmbeddingProvider, Depends(get_embedding_provider)]
 RerankerDep = Annotated[RerankProvider | None, Depends(get_rerank_provider)]
 LLMDep = Annotated[LLMProvider, Depends(get_llm_provider)]
+KVDep = Annotated[KVStore, Depends(get_kv_store)]
 
 
 async def _sse(
@@ -44,6 +47,7 @@ async def chat(
     embedder: EmbedderDep,
     reranker: RerankerDep,
     llm: LLMDep,
+    kv: KVDep,
 ) -> ChatResponse | StreamingResponse:
     kwargs = {
         "embedder": embedder,
@@ -52,6 +56,7 @@ async def chat(
         "reranker": reranker,
         "conversation_id": request.conversation_id,
         "language": request.language,
+        "kv": kv,
     }
     if request.stream:
         return StreamingResponse(

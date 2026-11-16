@@ -13,9 +13,11 @@ from app.db.models import Chunk, Document, DocumentStatus
 from app.db.session import get_session_factory
 from app.providers.embeddings import get_embedding_provider
 from app.providers.embeddings.base import EmbeddingError
+from app.providers.kv import get_kv_store
 from app.rag.arabic import normalize_arabic
 from app.rag.chunking import chunk_blocks
 from app.rag.parsing import ParseError, parse_file
+from app.services.answer_cache import bump_doc_epoch
 
 log = structlog.get_logger()
 
@@ -74,3 +76,6 @@ async def ingest_document(document_id: UUID) -> None:
             doc.error = f"Unexpected ingestion error: {exc}"
             log.exception("ingestion_unexpected_error", document_id=str(doc.id))
         await session.commit()
+        # Content changed (or failed to): cached answers for this company may
+        # be stale either way.
+        await bump_doc_epoch(get_kv_store(), doc.company_id)

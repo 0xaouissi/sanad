@@ -19,11 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.db.models import Company, Conversation, Message
 from app.providers.embeddings.base import EmbeddingProvider
+from app.providers.kv.base import KVStore
 from app.providers.llm.base import ChatMessage, LLMProvider
 from app.providers.reranker.base import RerankProvider
 from app.rag.language import detect_language
 from app.rag.retrieval import RetrievalHit, retrieve
 from app.schemas.chat import Citation
+from app.services.answer_cache import get_cached_answer, store_answer
 
 log = structlog.get_logger()
 
@@ -210,11 +212,30 @@ async def answer_question(
     reranker: RerankProvider | None = None,
     conversation_id: uuid.UUID | None = None,
     language: str | None = None,
+    kv: KVStore | None = None,
 ) -> ChatOutcome:
     started = time.perf_counter()
     language = language or detect_language(question)
     conversation = await _get_conversation(session, company.id, conversation_id)
     history = await _history(session, conversation.id, settings.memory_max_turns)
+
+    # Only history-free first turns are cacheable: follow-ups depend on the
+    # conversation, and the key must not mix companies or languages.
+    cache_eligible = kv is not None and settings.cache_enabled and not history
+    if cache_eligible:
+        cached = await get_cached_answer(kv, company.id, language, question)
+        if cached is not None:
+            log.info("chat_cache_hit", language=language)
+            message_id = await _save_turn(
+                session, conversation, question, cached["answer"], language
+            )
+            return ChatOutcome(
+                answer=cached["answer"],
+                language=language,
+                conversation_id=conversation.id,
+                message_id=message_id,
+                citations=[Citation.model_validate(c) for c in cached["citations"]],
+            )
 
     retrieval_start = time.perf_counter()
     hits = await retrieve(
@@ -252,6 +273,14 @@ async def answer_question(
             tier=settings.model_tier,
         )
 
+    if cache_eligible:
+        await store_answer(
+            kv,
+            company.id,
+            language,
+            question,
+            {"answer": answer, "citations": [c.model_dump(mode="json") for c in citations]},
+        )
     message_id = await _save_turn(session, conversation, question, answer, language)
     return ChatOutcome(
         answer=answer,
@@ -312,11 +341,30 @@ async def stream_answer(
     reranker: RerankProvider | None = None,
     conversation_id: uuid.UUID | None = None,
     language: str | None = None,
+    kv: KVStore | None = None,
 ) -> AsyncIterator[dict]:
     started = time.perf_counter()
     language = language or detect_language(question)
     conversation = await _get_conversation(session, company.id, conversation_id)
     history = await _history(session, conversation.id, settings.memory_max_turns)
+
+    cache_eligible = kv is not None and settings.cache_enabled and not history
+    if cache_eligible:
+        cached = await get_cached_answer(kv, company.id, language, question)
+        if cached is not None:
+            log.info("chat_cache_hit", language=language, mode="stream")
+            yield {"type": "token", "content": cached["answer"]}
+            message_id = await _save_turn(
+                session, conversation, question, cached["answer"], language
+            )
+            yield {
+                "type": "done",
+                "conversation_id": str(conversation.id),
+                "message_id": str(message_id),
+                "language": language,
+                "citations": cached["citations"],
+            }
+            return
 
     retrieval_start = time.perf_counter()
     hits = await retrieve(
@@ -340,7 +388,7 @@ async def stream_answer(
                 first_token_ms = round((time.perf_counter() - started) * 1000, 1)
             pieces.append(token)
             yield {"type": "token", "content": token}
-        answer = "".join(pieces)
+        answer = "".join(pieces).strip()
         if is_no_answer(answer, language):
             answer = NO_ANSWER[language]
             citations = []
@@ -358,6 +406,14 @@ async def stream_answer(
             tier=settings.model_tier,
         )
 
+    if cache_eligible:
+        await store_answer(
+            kv,
+            company.id,
+            language,
+            question,
+            {"answer": answer, "citations": [c.model_dump(mode="json") for c in citations]},
+        )
     message_id = await _save_turn(session, conversation, question, answer, language)
     yield {
         "type": "done",

@@ -13,11 +13,14 @@ from httpx import ASGITransport, AsyncClient
 from pytest import MonkeyPatch
 from sqlalchemy import text
 
+from app.core import metrics
 from app.core.config import get_settings
 from app.db.session import dispose_db, get_session_factory, init_db
 from app.main import create_app
 from app.providers.embeddings import get_embedding_provider
 from app.providers.embeddings.base import EmbeddingProvider
+from app.providers.kv import set_kv_store
+from app.providers.kv.memory import MemoryKVStore
 from app.providers.llm import get_llm_provider
 from app.providers.llm.base import ChatMessage, LLMProvider, LLMUnavailableError
 from app.providers.reranker import get_rerank_provider
@@ -131,6 +134,8 @@ async def client(
 ) -> AsyncIterator[AsyncClient]:
     fake = FakeEmbedder()
     monkeypatch.setattr("app.services.ingestion.get_embedding_provider", lambda: fake)
+    set_kv_store(MemoryKVStore())
+    metrics.reset()
     app = create_app()
     app.dependency_overrides[get_embedding_provider] = lambda: fake
     app.dependency_overrides[get_llm_provider] = lambda: fake_llm
@@ -139,6 +144,7 @@ async def client(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as test_client:
         yield test_client
+    set_kv_store(None)
 
 
 async def create_company(client: AsyncClient, name: str = "Acme") -> dict:

@@ -8,8 +8,10 @@ from sqlalchemy import select
 from app.api.deps import CompanyDep, SessionDep
 from app.core.config import get_settings
 from app.db.models import Document, DocumentStatus
+from app.providers.kv import get_kv_store
 from app.rag.parsing import SUPPORTED_EXTENSIONS
 from app.schemas.document import DocumentAccepted, DocumentOut
+from app.services.answer_cache import bump_doc_epoch
 from app.services.ingestion import document_path, ingest_document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -66,6 +68,7 @@ async def upload_document(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     await session.commit()
+    await bump_doc_epoch(get_kv_store(), company.id)
     background.add_task(ingest_document, doc.id)
     return DocumentAccepted(id=doc.id, filename=doc.filename, status=DocumentStatus.PENDING)
 
@@ -95,6 +98,7 @@ async def delete_document(
     path = document_path(company.id, doc.id, doc.filename)
     await session.delete(doc)
     await session.commit()
+    await bump_doc_epoch(get_kv_store(), company.id)
     path.unlink(missing_ok=True)
 
 
@@ -114,5 +118,6 @@ async def reindex_document(
     doc.status = DocumentStatus.PENDING
     doc.error = None
     await session.commit()
+    await bump_doc_epoch(get_kv_store(), company.id)
     background.add_task(ingest_document, doc.id)
     return DocumentAccepted(id=doc.id, filename=doc.filename, status=DocumentStatus.PENDING)
