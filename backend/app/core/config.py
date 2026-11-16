@@ -90,6 +90,20 @@ class Settings(BaseSettings):
     # Set true when the dashboard is served over HTTPS.
     cookie_secure: bool = False
 
+    # Website crawler (Step 6b). SSRF guards: http/https only, same domain,
+    # every DNS answer checked against private/local ranges, redirects
+    # re-validated, robots.txt respected.
+    crawl_max_pages: int = Field(default=20, ge=1, le=200)
+    crawl_max_page_bytes: int = Field(default=2_000_000, ge=1024)
+    crawl_timeout_seconds: float = Field(default=15.0, gt=0)
+    crawl_max_seconds: float = Field(default=300.0, gt=0)
+    # Scheduled re-sync interval per source. 0 disables the background loop.
+    crawl_resync_hours: int = Field(default=24, ge=0)
+    # DANGEROUS, dev/tests only: allow crawling private/local IPs (loopback,
+    # LAN, link-local). Never enable on a server reachable by untrusted users.
+    crawl_allow_private: bool = False
+    crawl_user_agent: str = "SanadBot/0.1 (self-hosted RAG indexer; respects robots.txt)"
+
     model_tier: ModelTier = ModelTier.SMALL
     cpu_only: bool = False
 
