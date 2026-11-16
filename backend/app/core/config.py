@@ -90,6 +90,15 @@ class Settings(BaseSettings):
     tessdata_prefix: str | None = None
     ocr_languages: str = "ara+fra+eng"
 
+    # Retrieval (Step 3). RERANK_ENABLED unset = tier default: off on small
+    # (CPU reranking eats the latency budget), on for medium/large GPUs.
+    rerank_enabled: bool | None = None
+    rerank_model: str = "BAAI/bge-reranker-v2-m3"
+    rerank_candidates: int = Field(default=8, ge=1, le=50)
+    retrieval_top_k: int = Field(default=5, ge=1, le=20)
+    retrieval_min_score: float = Field(default=0.55, ge=0.0, le=1.0)
+    memory_max_turns: int = Field(default=6, ge=0, le=50)
+
     @model_validator(mode="after")
     def _require_openai_key(self) -> "Settings":
         if self.llm_provider is LLMProvider.OPENAI and not self.openai_api_key:
@@ -100,6 +109,12 @@ class Settings(BaseSettings):
     def _check_chunk_overlap(self) -> "Settings":
         if self.chunk_overlap >= self.chunk_size:
             raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE")
+        return self
+
+    @model_validator(mode="after")
+    def _check_retrieval(self) -> "Settings":
+        if self.rerank_candidates < self.retrieval_top_k:
+            raise ValueError("RERANK_CANDIDATES must be >= RETRIEVAL_TOP_K")
         return self
 
     @property
@@ -125,6 +140,17 @@ class Settings(BaseSettings):
         if self.cpu_only:
             return "cpu"
         return self.embedding_device
+
+    @property
+    def resolved_rerank_enabled(self) -> bool:
+        if self.rerank_enabled is not None:
+            return self.rerank_enabled
+        return self.model_tier is not ModelTier.SMALL
+
+    @property
+    def first_token_budget_s(self) -> float:
+        # Step 3 latency targets: small tier (CPU) gets more headroom.
+        return 8.0 if self.model_tier is ModelTier.SMALL else 3.0
 
 
 @lru_cache

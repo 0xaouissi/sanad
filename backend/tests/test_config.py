@@ -123,3 +123,63 @@ def test_hf_home_override(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Settings().hf_home is None
     monkeypatch.setenv("HF_HOME", "F:/sanad/models/hf")
     assert Settings().hf_home == "F:/sanad/models/hf"
+
+
+def test_step3_retrieval_defaults() -> None:
+    s = Settings()
+    assert s.rerank_enabled is None
+    assert s.rerank_model == "BAAI/bge-reranker-v2-m3"
+    assert s.rerank_candidates == 8
+    assert s.retrieval_top_k == 5
+    assert s.retrieval_min_score == 0.55
+    assert s.memory_max_turns == 6
+
+
+@pytest.mark.parametrize(
+    ("tier", "expected"),
+    [(ModelTier.SMALL, False), (ModelTier.MEDIUM, True), (ModelTier.LARGE, True)],
+)
+def test_rerank_tier_default(tier: ModelTier, expected: bool) -> None:
+    assert Settings(model_tier=tier).resolved_rerank_enabled is expected
+
+
+@pytest.mark.parametrize("override", [True, False])
+def test_rerank_env_override_beats_tier(override: bool) -> None:
+    s = Settings(model_tier=ModelTier.SMALL, rerank_enabled=override)
+    assert s.resolved_rerank_enabled is override
+
+
+@pytest.mark.parametrize(
+    ("tier", "budget"),
+    [(ModelTier.SMALL, 8.0), (ModelTier.MEDIUM, 3.0), (ModelTier.LARGE, 3.0)],
+)
+def test_first_token_budget_per_tier(tier: ModelTier, budget: float) -> None:
+    assert Settings(model_tier=tier).first_token_budget_s == budget
+
+
+def test_rerank_candidates_must_cover_top_k() -> None:
+    with pytest.raises(ValidationError, match="RERANK_CANDIDATES"):
+        Settings(rerank_candidates=3, retrieval_top_k=5)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"retrieval_min_score": 1.5}, "retrieval_min_score"),
+        ({"retrieval_top_k": 0}, "retrieval_top_k"),
+        ({"memory_max_turns": -1}, "memory_max_turns"),
+    ],
+)
+def test_step3_bounds(kwargs: dict, match: str) -> None:
+    with pytest.raises(ValidationError, match=match):
+        Settings(**kwargs)
+
+
+def test_step3_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RERANK_ENABLED", "true")
+    monkeypatch.setenv("RETRIEVAL_MIN_SCORE", "0.7")
+    monkeypatch.setenv("MEMORY_MAX_TURNS", "0")
+    s = Settings()
+    assert s.resolved_rerank_enabled is True
+    assert s.retrieval_min_score == 0.7
+    assert s.memory_max_turns == 0
