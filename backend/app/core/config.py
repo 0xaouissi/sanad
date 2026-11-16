@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     llm_provider: LLMProvider = LLMProvider.OLLAMA
     llm_model: str | None = None
     llm_num_ctx: int | None = Field(default=None, ge=512, le=131072)
+    # Grounded support answers should be reproducible: 0 = greedy decoding.
+    # Raise only if you want more varied phrasing (and flakier small models).
+    llm_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
 
     ollama_base_url: str = "http://localhost:11434"
     ollama_num_gpu: int | None = Field(default=None, ge=0)

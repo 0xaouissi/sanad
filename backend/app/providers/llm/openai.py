@@ -35,6 +35,7 @@ class OpenAIProvider(LLMProvider):
             "model": self.model,
             "messages": [m.model_dump() for m in messages],
             "stream": stream,
+            "temperature": self._settings.llm_temperature,
         }
 
     def _check_status(self, response: httpx.Response) -> None:

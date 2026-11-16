@@ -29,7 +29,10 @@ class OllamaProvider(LLMProvider):
         )
 
     def _payload(self, messages: list[ChatMessage], stream: bool) -> dict:
-        options: dict = {"num_ctx": self._settings.resolved_num_ctx}
+        options: dict = {
+            "num_ctx": self._settings.resolved_num_ctx,
+            "temperature": self._settings.llm_temperature,
+        }
         num_gpu = self._settings.resolved_ollama_num_gpu
         if num_gpu is not None:
             options["num_gpu"] = num_gpu

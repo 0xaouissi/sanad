@@ -41,6 +41,7 @@ async def test_ollama_payload_follows_tier_settings() -> None:
     await ollama(handler, model_tier="medium").chat(MESSAGES)
     assert captured["model"] == "qwen2.5:7b-instruct-q4_K_M"
     assert captured["options"]["num_ctx"] == 16384
+    assert captured["options"]["temperature"] == 0.0
     assert captured["keep_alive"] == "5m"
     assert "num_gpu" not in captured["options"]
 
