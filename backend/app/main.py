@@ -19,6 +19,7 @@ from app.api.v1.companies import router as companies_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.documents import router as documents_router
 from app.api.v1.feedback import router as feedback_router
+from app.api.v1.handoff import router as handoff_router
 from app.api.v1.metrics import router as metrics_router
 from app.api.v1.search import router as search_router
 from app.core.config import get_settings
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(documents_router, prefix="/api/v1")
     app.include_router(search_router, prefix="/api/v1")
     app.include_router(feedback_router, prefix="/api/v1")
+    app.include_router(handoff_router, prefix="/api/v1")
     app.include_router(metrics_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1")

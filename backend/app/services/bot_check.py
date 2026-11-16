@@ -12,10 +12,11 @@ from fastapi import HTTPException
 
 from app.core.config import Settings
 from app.schemas.chat import ChatRequest
+from app.schemas.handoff import HandoffRequestIn
 
 
 def enforce_bot_check(
-    request: ChatRequest, via_site_key: bool, settings: Settings
+    request: ChatRequest | HandoffRequestIn, via_site_key: bool, settings: Settings
 ) -> None:
     if not via_site_key or not settings.bot_check_enabled:
         return

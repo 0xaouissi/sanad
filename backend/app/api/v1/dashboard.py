@@ -23,6 +23,7 @@ from app.db.models import (
     Document,
     DocumentStatus,
     Feedback,
+    HandoffRequest,
     Message,
     UserRole,
 )
@@ -41,6 +42,7 @@ from app.schemas.dashboard import (
     SettingsUpdate,
 )
 from app.schemas.document import DocumentAccepted, DocumentOut
+from app.schemas.handoff import HandoffOut
 from app.services.answer_cache import bump_doc_epoch
 from app.services.crawler import check_source_url, crawl_in_progress, crawl_source
 from app.services.evaluation import get_eval_state, run_evaluation, start_eval
@@ -200,12 +202,34 @@ async def ratings(auth: DashboardAuthDep, session: SessionDep) -> RatingsSummary
     return RatingsSummary(up=up, down=down, items=items)
 
 
+# Human handoff (Step 6c): read-only list of visitor requests. Rows exist only
+# while the company stores conversations (privacy toggle).
+
+
+@router.get("/handoffs", response_model=list[HandoffOut])
+async def list_handoffs(auth: DashboardAuthDep, session: SessionDep) -> list[HandoffRequest]:
+    rows = (
+        await session.scalars(
+            select(HandoffRequest)
+            .where(HandoffRequest.company_id == auth.company.id)
+            .order_by(HandoffRequest.created_at.desc())
+            .limit(200)
+        )
+    ).all()
+    return list(rows)
+
+
 def _settings_payload(company) -> DashboardSettings:
+    settings = get_settings()
     return DashboardSettings(
         company_name=company.name,
         site_key=company.site_key,
         allowed_domains=company.allowed_domains,
         store_conversations=company.store_conversations,
+        handoff_email=company.handoff_email,
+        telegram_chat_id=company.telegram_chat_id,
+        smtp_configured=bool(settings.smtp_host),
+        telegram_configured=bool(settings.telegram_bot_token),
     )
 
 
@@ -222,6 +246,10 @@ async def update_settings(
         auth.company.allowed_domains = body.allowed_domains
     if body.store_conversations is not None:
         auth.company.store_conversations = body.store_conversations
+    if body.handoff_email is not None:
+        auth.company.handoff_email = body.handoff_email or None
+    if body.telegram_chat_id is not None:
+        auth.company.telegram_chat_id = body.telegram_chat_id or None
     await session.commit()
     return _settings_payload(auth.company)
 
@@ -259,6 +287,13 @@ async def export_data(auth: OwnerDep, session: SessionDep) -> JSONResponse:
     feedback = (
         await session.scalars(select(Feedback).where(Feedback.company_id == company.id))
     ).all()
+    handoffs = (
+        await session.scalars(
+            select(HandoffRequest)
+            .where(HandoffRequest.company_id == company.id)
+            .order_by(HandoffRequest.created_at)
+        )
+    ).all()
     by_conversation: dict[UUID, list] = {}
     for message in messages:
         by_conversation.setdefault(message.conversation_id, []).append(
@@ -276,6 +311,8 @@ async def export_data(auth: OwnerDep, session: SessionDep) -> JSONResponse:
             "name": company.name,
             "allowed_domains": company.allowed_domains,
             "store_conversations": company.store_conversations,
+            "handoff_email": company.handoff_email,
+            "telegram_chat_id": company.telegram_chat_id,
             "created_at": company.created_at.isoformat(),
         },
         "documents": [
@@ -303,6 +340,19 @@ async def export_data(auth: OwnerDep, session: SessionDep) -> JSONResponse:
                 "created_at": f.created_at.isoformat(),
             }
             for f in feedback
+        ],
+        "handoff_requests": [
+            {
+                "id": str(h.id),
+                "email": h.email,
+                "message": h.message,
+                "language": h.language,
+                "email_status": h.email_status,
+                "telegram_status": h.telegram_status,
+                "error": h.error,
+                "created_at": h.created_at.isoformat(),
+            }
+            for h in handoffs
         ],
     }
     return JSONResponse(
