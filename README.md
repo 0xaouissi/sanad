@@ -1,5 +1,7 @@
 # Sanad (سند)
 
+[![CI](https://github.com/0xaouissi/sanad/actions/workflows/ci.yml/badge.svg)](https://github.com/0xaouissi/sanad/actions/workflows/ci.yml)
+
 Open-source, self-hosted RAG chatbot that any company embeds on its website
 with **one script tag**. Visitors ask about policies, rules and services; the
 bot answers **only** from the documents the company uploaded — with sources.
