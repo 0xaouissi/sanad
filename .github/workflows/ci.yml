@@ -1,8 +1,8 @@
 # CI covers everything that runs without model weights or a GPU:
 # lint, unit tests, integration tests (real PostgreSQL + pgvector, fake
-# embeddings) and the dashboard type-check/build. The live e2e and browser
-# suites need Ollama + BGE-M3 weights and stay a local pre-release gate
-# (see README "Tests and lint").
+# embeddings), the dashboard type-check/build, and a Docker Compose bring-up
+# with a health smoke test. The live e2e and browser suites need Ollama +
+# BGE-M3 weights and stay a local pre-release gate (see README "Tests").
 name: CI
 
 on:
@@ -76,3 +76,39 @@ jobs:
           cache-dependency-path: dashboard/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  # Brings up the real stack (api + db + redis + ollama) and smoke-tests the
+  # endpoints that need no model weights. The api only waits for ollama to
+  # *start*, not for ollama-init to finish pulling the ~2 GB model, so /health
+  # and /health/db come up without a GPU or any downloaded weights.
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start the stack
+        run: docker compose up -d --build
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8000/health >/dev/null; then
+              echo "api healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "API did not become healthy in time"
+          docker compose logs api
+          exit 1
+      - name: Health smoke test
+        run: |
+          curl -sf http://localhost:8000/health | grep -q 'ok'
+          curl -sf http://localhost:8000/health/db | grep -q 'pgvector'
+          curl -sf http://localhost:8000/widget.js | grep -q 'sanad'
+          curl -sf http://localhost:8000/dashboard/ | grep -qi 'doctype'
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose logs --no-color | tail -200
+      - name: Tear down
+        if: always()
+        run: docker compose down -v --remove-orphans
