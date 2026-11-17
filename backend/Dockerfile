@@ -10,6 +10,8 @@ RUN apt-get update \
 
 COPY pyproject.toml ./
 COPY app ./app
+# Alembic migrations run at app startup (init_db); they must be in the image.
+COPY migrations ./migrations
 # CPU torch first: avoids pulling the multi-GB CUDA build on CPU-only hosts.
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir ".[embeddings,ocr]"
