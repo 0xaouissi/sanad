@@ -23,7 +23,7 @@ Everything stays on your machine; nothing is hosted.
 The same live stack as the E2E tests (see [development.md](development.md)):
 
 - PostgreSQL with pgvector and the `sanad` database,
-- Ollama running with the small-tier model (`ollama pull qwen2.5:3b-instruct-q4_K_M`),
+- Ollama running with the small-tier model (`ollama pull qwen3:4b-instruct-2507-q4_K_M`),
 - BGE-M3 weights available (set `HF_HOME` to a folder on a disk with space),
 - the backend running: `cd backend && .venv/Scripts/python.exe -m uvicorn app.main:app`
   (Linux/macOS: `.venv/bin/python -m uvicorn app.main:app`).

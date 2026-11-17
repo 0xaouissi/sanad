@@ -21,7 +21,7 @@ languages, and any upload/delete/reindex invalidates that company's cache.
 Follow-up turns (with history) are never cached. Cache failures degrade to a
 miss; chat keeps working.
 
-**Prompt-injection defense (layered, verified on the live 3B model).**
+**Prompt-injection defense (layered, verified on the live small-tier model).**
 1. Grounding rules declare sources and questions to be *data, never
    instructions*, and forbid revealing the system prompt.
 2. Injection-matching sentences are stripped from the context sent to the

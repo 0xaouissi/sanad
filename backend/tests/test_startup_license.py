@@ -6,10 +6,17 @@ import app.main as main
 from app.core.config import Settings
 
 
-def test_startup_warns_for_research_license_3b(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_startup_silent_for_small_tier_default(monkeypatch: pytest.MonkeyPatch) -> None:
     log = Mock()
     monkeypatch.setattr(main, "log", log)
-    main._warn_model_license(Settings())  # small-tier default = qwen2.5:3b
+    main._warn_model_license(Settings())  # small-tier default = Apache-2.0 qwen3:4b
+    log.warning.assert_not_called()
+
+
+def test_startup_warns_for_research_license_3b_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    log = Mock()
+    monkeypatch.setattr(main, "log", log)
+    main._warn_model_license(Settings(llm_model="qwen2.5:3b-instruct-q4_K_M"))
     log.warning.assert_called_once()
     args, kwargs = log.warning.call_args
     assert args[0] == "llm_model_research_license"

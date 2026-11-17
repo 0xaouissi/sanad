@@ -9,7 +9,7 @@ about your policies and services and get grounded answers with citations, in
 their own language, with proper RTL. When the documents don't cover a
 question, Sanad says so and offers a human handoff instead of guessing.
 
-Local-first by design: Ollama (Qwen 2.5) + BGE-M3 embeddings on your own
+Local-first by design: Ollama (Qwen3 / Qwen2.5) + BGE-M3 embeddings on your own
 hardware, PostgreSQL + pgvector, Redis. With the default local models, your
 documents and visitors' questions stay on your server. Two opt-in features send
 data outward: the OpenAI-compatible API fallback (`LLM_PROVIDER=openai`) sends
@@ -60,7 +60,7 @@ docker compose up -d          # API :8000, PostgreSQL+pgvector, Redis, Ollama
 curl http://localhost:8000/health
 ```
 
-First run pulls the tier model (~2 GB for `small`). With an NVIDIA GPU:
+First run pulls the tier model (~2.5 GB for `small`). With an NVIDIA GPU:
 `docker compose -f docker-compose.yml -f deployment/docker-compose.gpu.yml up -d`.
 
 Create a company, upload a policy, embed the widget:
@@ -95,7 +95,7 @@ flowchart TD
   API --> RET["Hybrid retrieval + refusal thresholds"]
   RET --> PG[("PostgreSQL + pgvector<br/>dense BGE-M3 + full-text")]
   RET --> RK["cross-encoder reranker<br/>(medium / large tiers)"]
-  API --> LLM["Ollama Qwen2.5 instruct<br/>(or OpenAI-compatible API)"]
+  API --> LLM["Ollama Qwen3 / Qwen2.5 instruct<br/>(or OpenAI-compatible API)"]
   API --> KV[("Redis<br/>cache · rate limits · sessions")]
   API --> HO["Human handoff → SMTP / Telegram"]
   LLM -->|"grounded answer + [n] citations"| W
@@ -109,13 +109,15 @@ run through the real retrieval + prompt + model path.
 
 | Language | Questions | Passed | Model | Tier | Date |
 |----------|-----------|--------|-------|------|------|
-| English  | 14 | 14 | `qwen2.5:3b-instruct-q4_K_M` | small | 2026-11-17 |
-| French   | 14 | 14 | `qwen2.5:3b-instruct-q4_K_M` | small | 2026-11-17 |
-| Arabic   | 14 | 13 | `qwen2.5:3b-instruct-q4_K_M` | small | 2026-11-17 |
+| English  | 14 | 14 | `qwen3:4b-instruct-2507-q4_K_M` | small | 2026-11-17 |
+| French   | 14 | 14 | `qwen3:4b-instruct-2507-q4_K_M` | small | 2026-11-17 |
+| Arabic   | 14 | 14 | `qwen3:4b-instruct-2507-q4_K_M` | small | 2026-11-17 |
 
-**Golden: 41 / 42.** Held-out (unseen): **27 / 30**. Embeddings `BAAI/bge-m3`
-(CPU), reranker off (small-tier default). Every miss is listed with its failed
-checks in [docs/evaluation.md](docs/evaluation.md), which also explains how to
+**Golden: 42 / 42.** Held-out (unseen): **30 / 30**. Embeddings `BAAI/bge-m3`
+(CPU), reranker off (small-tier default). The Apache-2.0 Qwen3-4B-Instruct-2507
+default passes every case; the former research-licensed 3B scored 41/42 and
+27/30. Details and the model comparison are in
+[docs/evaluation.md](docs/evaluation.md), which also explains how to
 re-tune the refusal thresholds on your own documents.
 
 **Honest note:** this is a sanity check over three short demo policies, not a
@@ -125,12 +127,14 @@ documents after uploading them.
 
 ## Limitations
 
-- **Small tier is the default.** The 3B model has weaker Arabic grounding and
-  cross-language answers; the reported misses are exactly this. Medium/large
-  tiers and the reranker reduce them.
-- **Default model license.** The small-tier 3B is under the Qwen Research
-  License (non-commercial only). For commercial use choose medium/large
-  (Apache-2.0) or your own licensed API — see [docs/models.md](docs/models.md).
+- **Small tier is the default.** The Apache-2.0 Qwen3-4B-Instruct-2507 passes
+  every golden and held-out demo case, but 42 + 30 questions over three short
+  policies is a sanity check, not a benchmark — re-run on your own corpus.
+  Medium/large tiers and the reranker add headroom for harder documents.
+- **Default model license.** All tier defaults (small Qwen3-4B, medium/large
+  Qwen2.5) are Apache-2.0 and permit commercial use. The former 3B default is
+  research-licensed (non-commercial only) and stays opt-in via `LLM_MODEL`,
+  triggering a startup warning — see [docs/models.md](docs/models.md).
 - **Calibration corpus.** The refusal thresholds were tuned on the same demo
   policies the golden set targets — an upper bound, not a generalization
   estimate. Re-tune on your own documents ([guide](docs/evaluation.md#re-tuning-the-thresholds-on-your-own-documents)).

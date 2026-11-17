@@ -86,7 +86,7 @@ async def test_ollama_unreachable_gives_start_hint() -> None:
 async def test_ollama_health_requires_model_present() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
-            200, json={"models": [{"name": "qwen2.5:3b-instruct-q4_K_M"}]}
+            200, json={"models": [{"name": "qwen3:4b-instruct-2507-q4_K_M"}]}
         )
 
     await ollama(handler).health()

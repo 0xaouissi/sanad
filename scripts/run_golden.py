@@ -3,17 +3,17 @@ path and score it deterministically, exactly like the dashboard evaluation.
 
 This is the command-line twin of app.services.evaluation.run_evaluation, but
 it writes nothing to the dashboard eval state, conversations, cache or metrics.
-Use it to compare models (e.g. an Apache-2.0 candidate) without touching the
-default configuration: override LLM_MODEL / LLM_THINK in the environment.
+Use it to compare models without touching the default configuration: override
+LLM_MODEL / LLM_THINK in the environment.
 
 Prerequisites: PostgreSQL + Ollama running, the demo company seeded
 (`python -m app.eval.seed --password ...`), embeddings cached in HF_HOME.
 
-Run from the repo root with the backend venv:
+Run from the repo root with the backend venv (default: Apache-2.0 Qwen3-4B):
   PYTHONIOENCODING=utf-8 backend/.venv/Scripts/python.exe scripts/run_golden.py
 
-Compare an Apache-2.0 small-tier candidate (thinking disabled):
-  LLM_MODEL=qwen3:4b LLM_THINK=false PYTHONIOENCODING=utf-8 \
+Compare the former research-licensed 3B default (opt-in override):
+  LLM_MODEL=qwen2.5:3b-instruct-q4_K_M PYTHONIOENCODING=utf-8 \
     backend/.venv/Scripts/python.exe scripts/run_golden.py
 """
 

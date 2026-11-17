@@ -2,27 +2,33 @@
 
 ## 0.2.0 — 2026-11-17
 
-Repository polish, a clearer refusal split, and an Apache-2.0 model evaluation.
+Repository polish, a clearer refusal split, and a new Apache-2.0 small-tier
+default (Qwen3-4B-Instruct-2507).
 
 ### Added
 
 - **Held-out evaluation** — 30 unseen questions (10 per language, including
   related-but-not-covered) in `backend/app/eval/heldout.json`, run through the
   identical scored path by `scripts/run_heldout.py` and reported separately from
-  the golden set. Latest real-model run: 27/30. docs/evaluation.md now states
-  that the thresholds were calibrated on the same demo documents as the golden
-  set, and documents how to re-tune both thresholds on your own corpus.
-- **Apache-2.0 model evaluation** — the non-thinking
-  `qwen3:4b-instruct-2507-q4_K_M` (Qwen3-4B-Instruct-2507, Apache-2.0) scored
-  **42/42 golden and 30/30 held-out**, beating the research-licensed 3B
-  (41/42, 27/30) at similar warm latency. `scripts/run_golden.py` is the CLI
-  twin of the dashboard evaluation for comparing models without touching the
-  default config. The default is unchanged pending a decision; see
+  the golden set. Latest real-model run on the default: 30/30. docs/evaluation.md
+  now states that the thresholds were calibrated on the same demo documents as
+  the golden set, and documents how to re-tune both thresholds on your own corpus.
+- **Apache-2.0 small-tier default** — the non-thinking
+  `qwen3:4b-instruct-2507-q4_K_M` (Qwen3-4B-Instruct-2507, Apache-2.0) is now the
+  `small`-tier default, scoring **42/42 golden and 30/30 held-out** vs the
+  research-licensed 3B's 41/42 and 27/30 at similar warm latency. All tier
+  defaults are now Apache-2.0 (commercial-OK). The former 3B stays selectable
+  via `LLM_MODEL=qwen2.5:3b-instruct-q4_K_M` (research-only; triggers the startup
+  warning). `scripts/run_golden.py` is the CLI twin of the dashboard evaluation
+  for comparing models. Cold-start latency (~17 s first token / ~18 s total) and
+  the ~2.5 GB download are documented in docs/hardware-tiers.md; see also
   docs/evaluation.md and docs/models.md.
 - **Startup license warning** — the app logs `llm_model_research_license` when
   the resolved LLM is a research-licensed Qwen2.5-3B variant (including
   `LLM_MODEL` overrides and OpenAI-compatible model names), pointing to
-  Apache-2.0 options in docs/models.md.
+  Apache-2.0 options in docs/models.md. The check is general-purpose: the new
+  Apache-2.0 Qwen3-4B default is silent, but overriding `LLM_MODEL` back to a
+  restricted 3B still warns.
 - **`LLM_THINK` setting** — optional Ollama `think` parameter for reasoning
   models such as qwen3 (default unset = the field is not sent, so Qwen2.5
   behavior is unchanged).
@@ -49,7 +55,8 @@ Repository polish, a clearer refusal split, and an Apache-2.0 model evaluation.
 - **Golden evaluation** — grew from 33 to **42 questions** (14 per language)
   with a new *related-but-not-covered* category (9 cases) scored on whether the
   handoff is offered; out-of-scope and injection cases now also assert that no
-  handoff is offered. Latest real-model run: 41/42 (see docs/evaluation.md).
+  handoff is offered. Latest real-model run on the default: 42/42 (see
+  docs/evaluation.md).
 - **Retrieval thresholds under reranking** — both thresholds now always compare
   the pre-rerank dense cosine similarity. The reranker's sigmoid probability is
   a different scale, so it only reorders candidates and is never used for the
@@ -83,11 +90,11 @@ Repository polish, a clearer refusal split, and an Apache-2.0 model evaluation.
 
 ### Tests
 
-688 automated tests: 442 unit, 193 integration (real PostgreSQL + pgvector,
+689 automated tests: 443 unit, 193 integration (real PostgreSQL + pgvector,
 0 skipped), 30 live API e2e (real Ollama + BGE-M3, trilingual chat, refusal,
 crawl, evaluation, handoff transports), 23 real-Chromium browser tests.
-Golden 41/42 and held-out 27/30 on the default 3B; 42/42 and 30/30 on the
-Apache-2.0 Qwen3-4B-Instruct-2507 candidate.
+Golden 42/42 and held-out 30/30 on the Apache-2.0 Qwen3-4B-Instruct-2507
+default; the former research-licensed 3B scored 41/42 and 27/30.
 
 ## 0.1.0 — 2026-11-16
 

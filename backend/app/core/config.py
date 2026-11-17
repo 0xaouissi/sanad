@@ -27,7 +27,7 @@ class TierSpec(BaseModel, frozen=True):
 
 TIER_SPECS: dict[ModelTier, TierSpec] = {
     ModelTier.SMALL: TierSpec(
-        model="qwen2.5:3b-instruct-q4_K_M",
+        model="qwen3:4b-instruct-2507-q4_K_M",
         num_ctx=8192,
         min_vram_gb=4,
         hardware="CPU-only or 4 GB VRAM",
@@ -49,8 +49,9 @@ TIER_SPECS: dict[ModelTier, TierSpec] = {
 # Selectable via LLM_MODEL, never a tier default: Arabic quality is weak.
 LAST_RESORT_MODEL = "qwen2.5:1.5b-instruct-q4_K_M"
 
-# Qwen2.5-3B (the small-tier default) is under the Qwen Research License:
-# non-commercial / research-only. Other Qwen2.5 sizes and Qwen3 are Apache-2.0
+# Qwen2.5-3B is under the Qwen Research License: non-commercial / research-only.
+# It is no longer a tier default (small now ships the Apache-2.0 Qwen3-4B), but
+# stays selectable via LLM_MODEL. Other Qwen2.5 sizes and Qwen3 are Apache-2.0
 # (see docs/models.md). Matched on the resolved tag so LLM_MODEL overrides count.
 _RESEARCH_LICENSE_RE = re.compile(r"qwen2\.5[:\-]3b", re.IGNORECASE)
 

@@ -6,7 +6,7 @@ command from the repository root: see the [README](../README.md#quick-start).
 ## Native setup (no Docker)
 
 1. Install [Ollama](https://ollama.com/download) and pull the small-tier model:
-   `ollama pull qwen2.5:3b-instruct-q4_K_M`
+   `ollama pull qwen3:4b-instruct-2507-q4_K_M`
 2. Backend:
 
 ```bash

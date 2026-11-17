@@ -36,28 +36,27 @@ Latest run against the seeded demo company, real models, no mocks:
 
 | Language | Questions | Passed | Model | Tier | Date |
 |----------|-----------|--------|-------|------|------|
-| English  | 14 | 14 | `qwen2.5:3b-instruct-q4_K_M` | small | 2026-11-17 |
-| French   | 14 | 14 | `qwen2.5:3b-instruct-q4_K_M` | small | 2026-11-17 |
-| Arabic   | 14 | 13 | `qwen2.5:3b-instruct-q4_K_M` | small | 2026-11-17 |
+| English  | 14 | 14 | `qwen3:4b-instruct-2507-q4_K_M` | small | 2026-11-17 |
+| French   | 14 | 14 | `qwen3:4b-instruct-2507-q4_K_M` | small | 2026-11-17 |
+| Arabic   | 14 | 14 | `qwen3:4b-instruct-2507-q4_K_M` | small | 2026-11-17 |
 
 | Category | Questions | Passed |
 |----------|-----------|--------|
 | Grounded facts + citations | 12 | 12 |
 | Out-of-scope refusals (no handoff) | 15 | 15 |
-| Related-but-not-covered refusals (handoff offered) | 9 | 8 |
+| Related-but-not-covered refusals (handoff offered) | 9 | 9 |
 | Prompt-injection blocks | 6 | 6 |
 
-**Total: 41 / 42 passed.** Embeddings `BAAI/bge-m3` (CPU), reranker off
+**Total: 42 / 42 passed.** Embeddings `BAAI/bge-m3` (CPU), reranker off
 (small-tier default), `RETRIEVAL_MIN_SCORE=0.43`,
-`RETRIEVAL_OFF_TOPIC_SCORE=0.41`. Run started 2026-11-17 10:53 UTC via the
+`RETRIEVAL_OFF_TOPIC_SCORE=0.41`. Run started 2026-11-17 via the
 dashboard API on a GTX 1650 (4 GB VRAM) + 16 GB RAM host.
 
-The single miss is `ar-nc-giftwrap`: asked in Arabic whether the company
-offers gift wrapping, the 3B model answered "yes" (a hallucination with a
-citation) instead of refusing. The English and French equivalents refused
-correctly. This is the small tier's weaker Arabic grounding showing through
-on a related-but-not-covered question — a larger tier and/or the reranker
-reduce it. It is reported here rather than hidden.
+The Apache-2.0 Qwen3-4B-Instruct-2507 default passes every golden case,
+including the Arabic related-but-not-covered gift-wrapping question
+(`ar-nc-giftwrap`) that the former research-licensed 3B default hallucinated.
+The 3B's historical results are kept in the
+[model comparison](#model-comparison-an-apache-20-small-tier-candidate) below.
 
 **Honest note:** 42 questions over three short demo policies is a *sanity
 check, not a benchmark*. It proves the pipeline refuses correctly, offers
@@ -102,17 +101,23 @@ Latest run — real models, small tier, reranker off, same thresholds,
 
 | Language | Questions | Passed | Model | Tier |
 |----------|-----------|--------|-------|------|
-| English  | 10 | 8 | `qwen2.5:3b-instruct-q4_K_M` | small |
-| French   | 10 | 10 | `qwen2.5:3b-instruct-q4_K_M` | small |
-| Arabic   | 10 | 9 | `qwen2.5:3b-instruct-q4_K_M` | small |
+| English  | 10 | 10 | `qwen3:4b-instruct-2507-q4_K_M` | small |
+| French   | 10 | 10 | `qwen3:4b-instruct-2507-q4_K_M` | small |
+| Arabic   | 10 | 10 | `qwen3:4b-instruct-2507-q4_K_M` | small |
 
 | Category | Questions | Passed |
 |----------|-----------|--------|
-| Grounded facts + citations | 12 | 11 |
+| Grounded facts + citations | 12 | 12 |
 | Out-of-scope refusals (no handoff) | 9 | 9 |
-| Related-but-not-covered (handoff offered) | 9 | 7 |
+| Related-but-not-covered (handoff offered) | 9 | 9 |
 
-**Total: 27 / 30 passed.** The three misses, reported honestly:
+**Total: 30 / 30 passed.** The Apache-2.0 Qwen3-4B-Instruct-2507 default
+answers every unseen question correctly: it grounds the answerable cases,
+refuses the absent ones with the exact template (offering the handoff), and
+stays in-language throughout.
+
+The former research-licensed 3B default scored **27 / 30** on this same set.
+Its three misses, kept here as the honest historical picture:
 
 - `ho-en-refund-dest` (grounded, "Where is my refund sent?") — the 3B model
   returned the "couldn't find" refusal even though the documents state refunds
@@ -127,24 +132,22 @@ Latest run — real models, small tier, reranker off, same thresholds,
   **recited the retrieved shipping policy** instead of refusing: a grounding
   failure.
 
-The pattern is the small tier's weaker grounding and prompt adherence on
-unseen phrasings: it sometimes over-refuses, sometimes paraphrases the refusal
-(missing the handoff trigger), and sometimes recites sources instead of
-refusing. A larger tier and/or the reranker reduce these. The held-out set
-exists to surface exactly this gap between the calibration corpus and unseen
-questions — 27/30 here versus 41/42 on the golden set is the honest picture.
+Instruct-2507 fixed all three. The held-out set exists to surface exactly this
+gap between the calibration corpus and unseen questions; on the new default
+that gap is closed for this demo corpus (30/30 held-out, 42/42 golden).
 
 ## Model comparison: an Apache-2.0 small-tier candidate
 
-The small-tier default `qwen2.5:3b-instruct-q4_K_M` is **research-licensed**
-(see [models.md](models.md)). To find a commercially-licensed replacement at
-the same tier, the non-thinking **`qwen3:4b-instruct-2507-q4_K_M`**
-(Qwen3-4B-Instruct-2507, **Apache-2.0**) was evaluated on the identical golden
-and held-out sets — same demo documents, same thresholds, reranker off, same
-host. Both models were re-run in one session for a fair comparison
-(2026-11-17). The default was **not** changed.
+The former small-tier default `qwen2.5:3b-instruct-q4_K_M` is
+**research-licensed** (see [models.md](models.md)). To find a
+commercially-licensed replacement at the same tier, the non-thinking
+**`qwen3:4b-instruct-2507-q4_K_M`** (Qwen3-4B-Instruct-2507, **Apache-2.0**) was
+evaluated on the identical golden and held-out sets — same demo documents, same
+thresholds, reranker off, same host. Both models were re-run in one session for
+a fair comparison (2026-11-17). **Instruct-2507 won on both sets and is now the
+small-tier default**; the 3B remains selectable via `LLM_MODEL`.
 
-| Set | Language | `qwen2.5:3b` (research) | `qwen3:4b-instruct-2507` (Apache-2.0) |
+| Set | Language | `qwen2.5:3b` (research, former default) | `qwen3:4b-instruct-2507` (Apache-2.0, now default) |
 |-----|----------|-------------------------|----------------------------------------|
 | Golden (42) | English | 14 / 14 | 14 / 14 |
 | Golden | French | 14 / 14 | 14 / 14 |
@@ -161,11 +164,18 @@ golden set, and all three held-out misses (`ho-en-refund-dest` over-refusal,
 recitation). It refused correctly, offered the handoff only when it should,
 cited correctly and stayed in-language on every case.
 
-**Latency (same host, warm, GTX 1650 partial offload):** a grounded answer took
-~0.7 s on the 3B and ~1.4 s on Instruct-2507 — both far inside the 120 s
-`LLM_TIMEOUT`. The 42-case golden run took ~61 s (3B) vs ~87 s (Instruct-2507)
-wall-clock. The 4B model is modestly slower per answer but the same order of
-magnitude; it needs ~2.5 GB of weights vs ~1.9 GB for the 3B.
+**Latency (same host, GTX 1650 partial offload):** warm, a grounded answer took
+~0.7 s on the 3B and ~1.4 s on Instruct-2507 when the GPU was idle; under real
+GPU contention the warm first token measured ~4.4 s. **Cold start** (model
+evicted from memory, first request after `ollama stop`) measured **~17 s to
+first token / ~18 s total** for Instruct-2507 — the ~6–7 s model load dominates.
+The 8 s small-tier first-token budget is a **warm/steady-state** target; a cold
+first answer legitimately exceeds it. Both warm and cold are far inside the
+120 s `LLM_TIMEOUT`. The 42-case golden run took ~61 s (3B) vs ~87 s
+(Instruct-2507) wall-clock. The 4B model is modestly slower per answer but the
+same order of magnitude; it needs **~2.5 GB** of weights vs ~1.9 GB for the 3B.
+See [hardware-tiers.md](hardware-tiers.md#cold-start-latency-small-tier-measured)
+for the cold/warm breakdown and `keep_alive` guidance.
 
 **Why not the hybrid `qwen3:4b`?** The plain `qwen3:4b` tag is a *hybrid
 thinking* model: it always emits reasoning tokens. On this CPU-class host a
@@ -179,21 +189,22 @@ disabled" candidate.
 
 **Reading:** on this small demo corpus the Apache-2.0 Instruct-2507 is both
 commercially usable *and* more accurate than the research-licensed 3B, at
-similar latency — a strong candidate for the small-tier default. The same
+similar warm latency — which is why it is now the small-tier default. The same
 honest caveat applies: 42 + 30 questions over three short policies is a sanity
-check, not a benchmark. Re-run on your own corpus before deciding. The default
-remains `qwen2.5:3b-instruct-q4_K_M` pending an explicit decision.
+check, not a benchmark. Re-run on your own corpus before relying on it. The
+former 3B default stays available through `LLM_MODEL=qwen2.5:3b-instruct-q4_K_M`
+(research-licensed; triggers the startup warning).
 
 Run the comparison yourself (demo seeded, Ollama up, from the repo root):
 
 ```bash
-# baseline (default 3B)
+# baseline (default: Apache-2.0 Qwen3-4B-Instruct-2507)
 PYTHONIOENCODING=utf-8 backend/.venv/Scripts/python.exe scripts/run_golden.py
 PYTHONIOENCODING=utf-8 backend/.venv/Scripts/python.exe scripts/run_heldout.py
-# Apache-2.0 non-thinking candidate
-LLM_MODEL=qwen3:4b-instruct-2507-q4_K_M PYTHONIOENCODING=utf-8 \
+# former research-licensed 3B default (opt-in override)
+LLM_MODEL=qwen2.5:3b-instruct-q4_K_M PYTHONIOENCODING=utf-8 \
   backend/.venv/Scripts/python.exe scripts/run_golden.py
-LLM_MODEL=qwen3:4b-instruct-2507-q4_K_M PYTHONIOENCODING=utf-8 \
+LLM_MODEL=qwen2.5:3b-instruct-q4_K_M PYTHONIOENCODING=utf-8 \
   backend/.venv/Scripts/python.exe scripts/run_heldout.py
 ```
 

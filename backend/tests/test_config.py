@@ -14,7 +14,7 @@ from app.core.config import (
 def test_default_tier_is_small() -> None:
     s = Settings()
     assert s.model_tier is ModelTier.SMALL
-    assert s.resolved_llm_model == "qwen2.5:3b-instruct-q4_K_M"
+    assert s.resolved_llm_model == "qwen3:4b-instruct-2507-q4_K_M"
     assert s.resolved_num_ctx == 8192
 
 
@@ -24,7 +24,7 @@ def test_every_tier_has_documented_default(tier: ModelTier) -> None:
     s = Settings(model_tier=tier)
     assert s.resolved_llm_model == spec.model
     assert s.resolved_num_ctx == spec.num_ctx
-    assert spec.model.startswith("qwen2.5:")
+    assert spec.model.startswith(("qwen2.5:", "qwen3:"))
     assert "q4_K_M" in spec.model
 
 
