@@ -15,6 +15,12 @@ settings change only — no code edits, no rebuilds.
 All defaults are Qwen 2.5 instruct, quantized, served locally through Ollama.
 Embeddings are always local: `BAAI/bge-m3` (multilingual, 1024-dim dense vectors).
 
+**License caveat.** The `small` default (3B) is under the **Qwen Research
+License — non-commercial / research-only**; `medium` (7B) and `large` (14B) are
+Apache-2.0 and permit commercial use. Embeddings (MIT) and the reranker
+(Apache-2.0) are unrestricted. Read [models.md](models.md) before deploying
+commercially.
+
 ### The 1.5B last resort
 
 `qwen2.5:1.5b-instruct-q4_K_M` is **never** a tier default. Its Arabic is weak,
