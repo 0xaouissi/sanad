@@ -36,13 +36,18 @@ class OllamaProvider(LLMProvider):
         num_gpu = self._settings.resolved_ollama_num_gpu
         if num_gpu is not None:
             options["num_gpu"] = num_gpu
-        return {
+        payload = {
             "model": self.model,
             "messages": [m.model_dump() for m in messages],
             "stream": stream,
             "options": options,
             "keep_alive": self._settings.ollama_keep_alive,
         }
+        # Only sent when explicitly configured, so non-thinking models (qwen2.5)
+        # are unaffected. false disables reasoning traces on models like qwen3.
+        if self._settings.llm_think is not None:
+            payload["think"] = self._settings.llm_think
+        return payload
 
     def _unreachable(self) -> LLMUnavailableError:
         return LLMUnavailableError(

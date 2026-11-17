@@ -143,3 +143,25 @@ def test_factory_selects_provider_from_config(monkeypatch: MonkeyPatch) -> None:
     finally:
         get_settings.cache_clear()
         get_llm_provider.cache_clear()
+
+
+async def test_ollama_think_omitted_by_default() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"message": {"content": "ok"}})
+
+    await ollama(handler).chat(MESSAGES)
+    assert "think" not in captured
+
+
+async def test_ollama_think_sent_when_configured() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"message": {"content": "ok"}})
+
+    await ollama(handler, llm_think=False).chat(MESSAGES)
+    assert captured["think"] is False

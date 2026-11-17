@@ -1,3 +1,4 @@
+import re
 from enum import StrEnum
 from functools import lru_cache
 from typing import Literal
@@ -47,6 +48,16 @@ TIER_SPECS: dict[ModelTier, TierSpec] = {
 
 # Selectable via LLM_MODEL, never a tier default: Arabic quality is weak.
 LAST_RESORT_MODEL = "qwen2.5:1.5b-instruct-q4_K_M"
+
+# Qwen2.5-3B (the small-tier default) is under the Qwen Research License:
+# non-commercial / research-only. Other Qwen2.5 sizes and Qwen3 are Apache-2.0
+# (see docs/models.md). Matched on the resolved tag so LLM_MODEL overrides count.
+_RESEARCH_LICENSE_RE = re.compile(r"qwen2\.5[:\-]3b", re.IGNORECASE)
+
+
+def is_research_license_model(model: str) -> bool:
+    """True when the model is a research-licensed Qwen2.5-3B variant."""
+    return bool(_RESEARCH_LICENSE_RE.search(model))
 
 
 class Settings(BaseSettings):
@@ -132,6 +143,10 @@ class Settings(BaseSettings):
     # Grounded support answers should be reproducible: 0 = greedy decoding.
     # Raise only if you want more varied phrasing (and flakier small models).
     llm_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    # Thinking mode for reasoning models (e.g. qwen3). None = the field is not
+    # sent (provider default); false disables reasoning traces for grounded,
+    # low-latency answers. Non-thinking models like qwen2.5 are unaffected.
+    llm_think: bool | None = None
 
     ollama_base_url: str = "http://localhost:11434"
     ollama_num_gpu: int | None = Field(default=None, ge=0)

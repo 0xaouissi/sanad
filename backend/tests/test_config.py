@@ -7,6 +7,7 @@ from app.core.config import (
     LLMProvider,
     ModelTier,
     Settings,
+    is_research_license_model,
 )
 
 
@@ -198,3 +199,49 @@ def test_step3_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.retrieval_min_score == 0.7
     assert s.retrieval_off_topic_score == 0.6
     assert s.memory_max_turns == 0
+
+
+def test_llm_think_defaults_to_unset() -> None:
+    assert Settings().llm_think is None
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_llm_think_override(value: bool) -> None:
+    assert Settings(llm_think=value).llm_think is value
+
+
+def test_llm_think_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_THINK", "false")
+    assert Settings().llm_think is False
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "qwen2.5:3b-instruct-q4_K_M",
+        "qwen2.5:3b-instruct-q8_0",
+        "qwen2.5:3b",
+        "Qwen/Qwen2.5-3B-Instruct",
+        "qwen2.5-3b-instruct",
+    ],
+)
+def test_research_license_detected_for_3b(model: str) -> None:
+    assert is_research_license_model(model) is True
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "qwen2.5:7b-instruct-q4_K_M",
+        "qwen2.5:14b-instruct-q4_K_M",
+        "qwen2.5:1.5b-instruct-q4_K_M",
+        "qwen2.5:0.5b-instruct-q4_K_M",
+        "qwen2.5:32b-instruct-q4_K_M",
+        "qwen3:4b",
+        "qwen3:4b-instruct-2507-q4_K_M",
+        "gpt-4o-mini",
+        "",
+    ],
+)
+def test_research_license_not_detected_for_others(model: str) -> None:
+    assert is_research_license_model(model) is False

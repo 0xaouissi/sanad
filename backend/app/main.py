@@ -22,7 +22,14 @@ from app.api.v1.feedback import router as feedback_router
 from app.api.v1.handoff import router as handoff_router
 from app.api.v1.metrics import router as metrics_router
 from app.api.v1.search import router as search_router
-from app.core.config import get_settings
+from app.core.config import (
+    LLMProvider as LLMProviderKind,
+)
+from app.core.config import (
+    Settings,
+    get_settings,
+    is_research_license_model,
+)
 from app.core.logging import configure_logging
 from app.db.session import dispose_db, init_db
 from app.providers.embeddings import get_embedding_provider
@@ -34,11 +41,31 @@ from app.services.crawler import resync_loop
 log = structlog.get_logger()
 
 
+def _warn_model_license(settings: Settings) -> None:
+    """Log a startup warning when the active LLM is research-licensed (3B)."""
+    model = (
+        settings.openai_model
+        if settings.llm_provider is LLMProviderKind.OPENAI
+        else settings.resolved_llm_model
+    )
+    if is_research_license_model(model):
+        log.warning(
+            "llm_model_research_license",
+            model=model,
+            license="Qwen Research License (non-commercial / research-only)",
+            hint=(
+                "For commercial use set MODEL_TIER=medium or large (Apache-2.0), "
+                "or LLM_MODEL to an Apache-2.0 model. See docs/models.md."
+            ),
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_db()
     await init_kv()
     settings = get_settings()
+    _warn_model_license(settings)
     resync_task = (
         asyncio.create_task(resync_loop()) if settings.crawl_resync_hours > 0 else None
     )
