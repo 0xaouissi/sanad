@@ -8,9 +8,12 @@ Two recorded GIFs show the whole product without installing anything:
 
 The widget clip asks the same refund question in English, French and Arabic
 against the sample documents: streamed answers, citation chips, a thumbs-up,
-and the full RTL layout once Arabic is detected. The dashboard clip logs in
-and walks the Documents, Evaluation, Handoffs and Settings tabs, then switches
-the interface to Arabic (RTL).
+and the full RTL layout once Arabic is detected. It then asks a
+related-but-not-covered question ("Do you offer gift wrapping for orders?") to
+show the contextual **Talk to a human** offer: the "couldn't find this" refusal
+plus an inline button that opens the handoff form with the question prefilled.
+The dashboard clip logs in and walks the Documents, Evaluation, Handoffs and
+Settings tabs, then switches the interface to Arabic (RTL).
 
 To run the demo yourself — or re-record the GIFs — follow the steps below.
 Everything stays on your machine; nothing is hosted.
@@ -42,6 +45,11 @@ real embedding model. It prints:
 
 Re-running with the same email fails with a clear message instead of creating
 duplicates; use `--email` to seed another company.
+
+> **The demo password is public — change it before any real use.**
+> `demo-password-1` is a well-known value for local demos only. Seed with a
+> strong `--password` of your own before the instance protects real data, and
+> never reuse the demo credentials on a deployed server.
 
 ## 2. Allow localhost and embed the widget
 
@@ -85,8 +93,14 @@ Open <http://localhost:8080/demo.html> and click the chat button.
   - `كم يوما لدي لطلب استرجاع المبلغ؟`
   Each answer comes back in the question's language with citation chips;
   click a chip to see filename, page and heading.
-- Ask something the documents do not cover (`Who won the 2022 World Cup?`) —
-  the bot refuses instead of guessing, in the same language.
+- Ask something off-topic (`Who won the 2022 World Cup?`) — the bot replies
+  "I can only help with questions about this company", with **no** handoff
+  offer, in the same language.
+- Ask something company-related the documents do not cover (`Do you offer gift
+  wrapping for orders?`) — the bot replies "I couldn't find this in the
+  company's documents" and offers an inline **Talk to a human** button that
+  opens the handoff form with your question prefilled. It never submits a
+  ticket automatically; you must press Send.
 - Thumbs up/down under an answer; the rating appears in the dashboard.
 - The header dropdown forces `ar` / `fr` / `en`; Arabic flips the panel to RTL.
 - Narrow the window below 480 px: the panel becomes full-screen mobile layout.

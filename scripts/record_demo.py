@@ -3,8 +3,9 @@
 Starts a private uvicorn + static site, creates a demo company, uploads the
 trilingual samples, then drives real Chromium with Playwright: the widget
 answers in English, French and Arabic (with citations, RTL and a thumbs-up),
-and the dashboard tours its tabs. Screenshots are assembled into GIFs with
-Pillow. Nothing is uploaded anywhere; output lands in docs/.
+then shows the contextual "Talk to a human" offer on a related-but-not-covered
+question, and the dashboard tours its tabs. Screenshots are assembled into GIFs
+with Pillow. Nothing is uploaded anywhere; output lands in docs/.
 
 Run (from backend/, with the live stack available):
     HF_HOME=F:/sanad/models/hf PLAYWRIGHT_BROWSERS_PATH=F:/sanad/models/playwright \
@@ -45,6 +46,12 @@ QUESTIONS = [
     ("fr", "Combien de jours ai-je pour demander un remboursement ?"),
     ("ar", "كم يوما لدي لطلب استرجاع المبلغ؟"),
 ]
+
+# A company-related question the demo policies do not cover, used to showcase
+# the contextual handoff offer. The English gift-wrapping case is golden-proven
+# to refuse as not_covered (the Arabic equivalent is the small tier's one known
+# miss), so the inline "Talk to a human" button reliably appears.
+NOT_COVERED_QUESTION = "Do you offer gift wrapping for orders?"
 
 
 def free_port() -> int:
@@ -173,6 +180,22 @@ def record_widget(page, site_url: str, frames: list) -> None:
             page.locator(".sanad-rate").first.click()
             page.locator(".sanad-rate-note").wait_for(state="visible")
             shoot(page, frames, 1800)
+
+    # Contextual handoff offer: a related-but-not-covered question gets the
+    # "couldn't find" refusal plus an inline "Talk to a human" button that opens
+    # the form with the question prefilled. The visitor must still press Send —
+    # no ticket is ever submitted automatically.
+    page.locator(".sanad-input").fill(NOT_COVERED_QUESTION)
+    shoot(page, frames, 900)
+    page.locator(".sanad-send").click()
+    page.locator(".sanad-handoff-offer").wait_for(state="visible", timeout=90_000)
+    shoot(page, frames, 2600)
+    page.locator(".sanad-handoff-offer").click()
+    page.locator(".sanad-handoff-view").wait_for(state="visible")
+    page.wait_for_timeout(400)
+    shoot(page, frames, 2400)
+    page.locator(".sanad-handoff-back").click()
+    page.locator(".sanad-handoff-view").wait_for(state="hidden")
 
 
 def record_dashboard(page, base: str, company: dict, frames: list) -> None:
