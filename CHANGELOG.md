@@ -1,6 +1,36 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-11-17
+
+Repository polish, a clearer refusal split, and an Apache-2.0 model evaluation.
+
+### Added
+
+- **Held-out evaluation** — 30 unseen questions (10 per language, including
+  related-but-not-covered) in `backend/app/eval/heldout.json`, run through the
+  identical scored path by `scripts/run_heldout.py` and reported separately from
+  the golden set. Latest real-model run: 27/30. docs/evaluation.md now states
+  that the thresholds were calibrated on the same demo documents as the golden
+  set, and documents how to re-tune both thresholds on your own corpus.
+- **Apache-2.0 model evaluation** — the non-thinking
+  `qwen3:4b-instruct-2507-q4_K_M` (Qwen3-4B-Instruct-2507, Apache-2.0) scored
+  **42/42 golden and 30/30 held-out**, beating the research-licensed 3B
+  (41/42, 27/30) at similar warm latency. `scripts/run_golden.py` is the CLI
+  twin of the dashboard evaluation for comparing models without touching the
+  default config. The default is unchanged pending a decision; see
+  docs/evaluation.md and docs/models.md.
+- **Startup license warning** — the app logs `llm_model_research_license` when
+  the resolved LLM is a research-licensed Qwen2.5-3B variant (including
+  `LLM_MODEL` overrides and OpenAI-compatible model names), pointing to
+  Apache-2.0 options in docs/models.md.
+- **`LLM_THINK` setting** — optional Ollama `think` parameter for reasoning
+  models such as qwen3 (default unset = the field is not sent, so Qwen2.5
+  behavior is unchanged).
+- **Repository kit** — CONTRIBUTING.md, SECURITY.md, issue templates, a
+  cross-platform Makefile, and Dependabot configuration
+  (`.github/dependabot.yml`).
+- **CI compose-smoke job** — `docker compose up --build` plus a health smoke
+  test (`/health`, `/health/db`, `/widget.js`, `/dashboard/`).
 
 ### Changed
 
@@ -25,15 +55,39 @@
   a different scale, so it only reorders candidates and is never used for the
   refusal decision; one calibration stays valid with reranking on or off. The
   decision uses the best cosine score across hits, not the first (reranked) hit.
+- **README and docs** — README rewritten as a short pitch (demo GIFs, features,
+  quick start, architecture diagram, evaluation results, limitations, links);
+  detailed sections moved into `docs/` and renamed by topic, not build step.
+  Added an evaluation results table (per language, model, tier, date, question
+  count) with the honest small-set caveat, and a model-licenses note
+  (`docs/models.md`).
+- **README privacy claim** — "No data leaves your server" now states that the
+  default local models keep data on-server, while two opt-in features send data
+  outward: the OpenAI-compatible API fallback (`LLM_PROVIDER=openai`) and human
+  handoff (SMTP email / Telegram).
+- **Demo GIFs** — re-recorded with the contextual handoff offer; verified no
+  frame shows a secret key or personal email; docs note the demo password must
+  be changed before any real use.
 
-### Added
+### Fixed
 
-- **Held-out evaluation** — 30 unseen questions (10 per language, including
-  related-but-not-covered) in `backend/app/eval/heldout.json`, run through the
-  identical scored path by `scripts/run_heldout.py` and reported separately from
-  the golden set. Latest real-model run: 27/30. docs/evaluation.md now states
-  that the thresholds were calibrated on the same demo documents as the golden
-  set, and documents how to re-tune both thresholds on your own corpus.
+- **Docker image migrations** — the image now copies `migrations/`, so Alembic
+  runs at startup (`init_db`) instead of aborting with "Path doesn't exist:
+  /app/migrations". Caught by the new compose-smoke CI job.
+
+### Security
+
+- Secret scanning and push protection enabled; Dependabot alerts, security
+  updates and private vulnerability reporting enabled. gitleaks scanned the
+  full git history (no leaks).
+
+### Tests
+
+688 automated tests: 442 unit, 193 integration (real PostgreSQL + pgvector,
+0 skipped), 30 live API e2e (real Ollama + BGE-M3, trilingual chat, refusal,
+crawl, evaluation, handoff transports), 23 real-Chromium browser tests.
+Golden 41/42 and held-out 27/30 on the default 3B; 42/42 and 30/30 on the
+Apache-2.0 Qwen3-4B-Instruct-2507 candidate.
 
 ## 0.1.0 — 2026-11-16
 
