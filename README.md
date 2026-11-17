@@ -10,7 +10,11 @@ their own language, with proper RTL. When the documents don't cover a
 question, Sanad says so and offers a human handoff instead of guessing.
 
 Local-first by design: Ollama (Qwen 2.5) + BGE-M3 embeddings on your own
-hardware, PostgreSQL + pgvector, Redis. No data leaves your server. MIT.
+hardware, PostgreSQL + pgvector, Redis. With the default local models, your
+documents and visitors' questions stay on your server. Two opt-in features send
+data outward: the OpenAI-compatible API fallback (`LLM_PROVIDER=openai`) sends
+prompts to that provider, and human handoff delivers visitor messages through
+your SMTP email or Telegram. MIT.
 
 ## Demo
 
