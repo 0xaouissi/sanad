@@ -54,37 +54,40 @@ async def main() -> None:
     embedder = get_embedding_provider()
     llm = get_llm_provider()
     reranker = get_rerank_provider()
-    results = []
     async with get_session_factory()() as session:
         company = (
             await session.execute(select(Company).where(Company.name == DEMO_NAME))
         ).scalar_one_or_none()
         if company is None:
             company = (await session.execute(select(Company).limit(1))).scalar_one_or_none()
-        if company is None:
-            print("No company found. Seed the demo first: python -m app.eval.seed --password ...")
-            await dispose_db()
-            return
-        rerank_on = reranker is not None
-        print(f"Company: {company.name} | model={settings.resolved_llm_model}")
-        print(f"tier={settings.model_tier} | think={settings.llm_think} | rerank={rerank_on}")
-        print(
-            f"Thresholds: min={settings.retrieval_min_score} "
-            f"off_topic={settings.retrieval_off_topic_score}\n"
-        )
-        for case in cases:
-            started = time.perf_counter()
+    if company is None:
+        print("No company found. Seed the demo first: python -m app.eval.seed --password ...")
+        await dispose_db()
+        return
+    rerank_on = reranker is not None
+    print(f"Company: {company.name} | model={settings.resolved_llm_model}")
+    print(f"tier={settings.model_tier} | think={settings.llm_think} | rerank={rerank_on}")
+    print(
+        f"Thresholds: min={settings.retrieval_min_score} "
+        f"off_topic={settings.retrieval_off_topic_score}\n"
+    )
+    results = []
+    # A fresh session per case: a slow model can idle the connection long
+    # enough for PostgreSQL to drop it mid-run.
+    for case in cases:
+        started = time.perf_counter()
+        async with get_session_factory()() as session:
             answer, citations, kind = await _answer_case(
                 session, company, case, embedder, llm, settings, reranker
             )
-            duration_ms = round((time.perf_counter() - started) * 1000, 1)
-            result = score_case(case, answer, citations, duration_ms, kind)
-            results.append(result)
-            failed = [name for name, ok in result.checks.items() if not ok]
-            status = "PASS" if result.passed else "FAIL " + ",".join(failed)
-            print(f"{case.id:22} {case.language} {case.category:13} {status}  kind={kind}")
-            if not result.passed:
-                print(f"    answer: {result.answer}")
+        duration_ms = round((time.perf_counter() - started) * 1000, 1)
+        result = score_case(case, answer, citations, duration_ms, kind)
+        results.append(result)
+        failed = [name for name, ok in result.checks.items() if not ok]
+        status = "PASS" if result.passed else "FAIL " + ",".join(failed)
+        print(f"{case.id:22} {case.language} {case.category:13} {status}  kind={kind}")
+        if not result.passed:
+            print(f"    answer: {result.answer}")
     summary = summarize(results)
     print("\nSUMMARY " + json.dumps(summary, ensure_ascii=False))
     await dispose_db()
