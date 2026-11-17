@@ -1,0 +1,211 @@
+{
+  "version": 1,
+  "description": "Held-out generalization set for the Sanad demo documents (samples/). These 30 questions (10 per language) were NOT used to calibrate the retrieval thresholds and do not overlap the golden set. They are run through the identical retrieval + prompt + model path and scored deterministically, then reported SEPARATELY from the golden results to show how the refusals and grounding generalize to unseen phrasings. Same demo documents; grounded cases cite any of the three language versions.",
+  "documents": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"],
+  "cases": [
+    {
+      "id": "ho-en-express",
+      "language": "en",
+      "category": "grounded",
+      "question": "How many business days does express delivery take?",
+      "expected_facts": ["2"],
+      "expected_sources": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"]
+    },
+    {
+      "id": "ho-en-tracking",
+      "language": "en",
+      "category": "grounded",
+      "question": "Does standard delivery include tracking?",
+      "expected_facts": ["tracking"],
+      "expected_sources": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"]
+    },
+    {
+      "id": "ho-en-hours",
+      "language": "en",
+      "category": "grounded",
+      "question": "What time does the support team open and close?",
+      "expected_facts": ["9", "17"],
+      "expected_sources": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"]
+    },
+    {
+      "id": "ho-en-refund-dest",
+      "language": "en",
+      "category": "grounded",
+      "question": "Where is my refund sent?",
+      "expected_facts": ["original", "payment"],
+      "expected_sources": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"]
+    },
+    {
+      "id": "ho-en-oos-mountain",
+      "language": "en",
+      "category": "out_of_scope",
+      "question": "What is the tallest mountain in the world?"
+    },
+    {
+      "id": "ho-en-oos-play",
+      "language": "en",
+      "category": "out_of_scope",
+      "question": "Who wrote the play Romeo and Juliet?"
+    },
+    {
+      "id": "ho-en-oos-boiling",
+      "language": "en",
+      "category": "out_of_scope",
+      "question": "At what temperature does water boil at sea level?"
+    },
+    {
+      "id": "ho-en-nc-return-cost",
+      "language": "en",
+      "category": "not_covered",
+      "question": "Who pays for the return shipping when I send a product back?"
+    },
+    {
+      "id": "ho-en-nc-bulk",
+      "language": "en",
+      "category": "not_covered",
+      "question": "Do you offer a discount for bulk orders?"
+    },
+    {
+      "id": "ho-en-nc-phone",
+      "language": "en",
+      "category": "not_covered",
+      "question": "What is your support phone number?"
+    },
+    {
+      "id": "ho-fr-express",
+      "language": "fr",
+      "category": "grounded",
+      "question": "Combien de jours ouvrables prend la livraison express ?",
+      "expected_facts": ["2"],
+      "expected_sources": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"]
+    },
+    {
+      "id": "ho-fr-tracking",
+      "language": "fr",
+      "category": "grounded",
+      "question": "La livraison standard inclut-elle un suivi ?",
+      "expected_facts": ["suivi"],
+      "expected_sources": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"]
+    },
+    {
+      "id": "ho-fr-hours",
+      "language": "fr",
+      "category": "grounded",
+      "question": "À quelle heure l'assistance ouvre-t-elle et ferme-t-elle ?",
+      "expected_facts": ["9", "17"],
+      "expected_sources": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"]
+    },
+    {
+      "id": "ho-fr-refund-dest",
+      "language": "fr",
+      "category": "grounded",
+      "question": "Où mon remboursement est-il envoyé ?",
+      "expected_facts": ["origine", "paiement"],
+      "expected_sources": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"]
+    },
+    {
+      "id": "ho-fr-oos-mountain",
+      "language": "fr",
+      "category": "out_of_scope",
+      "question": "Quelle est la plus haute montagne du monde ?"
+    },
+    {
+      "id": "ho-fr-oos-play",
+      "language": "fr",
+      "category": "out_of_scope",
+      "question": "Qui a écrit la pièce Roméo et Juliette ?"
+    },
+    {
+      "id": "ho-fr-oos-boiling",
+      "language": "fr",
+      "category": "out_of_scope",
+      "question": "À quelle température l'eau bout-elle au niveau de la mer ?"
+    },
+    {
+      "id": "ho-fr-nc-return-cost",
+      "language": "fr",
+      "category": "not_covered",
+      "question": "Qui paie les frais de retour quand je renvoie un produit ?"
+    },
+    {
+      "id": "ho-fr-nc-bulk",
+      "language": "fr",
+      "category": "not_covered",
+      "question": "Proposez-vous une réduction pour les commandes en gros ?"
+    },
+    {
+      "id": "ho-fr-nc-phone",
+      "language": "fr",
+      "category": "not_covered",
+      "question": "Quel est le numéro de téléphone de votre assistance ?"
+    },
+    {
+      "id": "ho-ar-express",
+      "language": "ar",
+      "category": "grounded",
+      "question": "كم يوم عمل يستغرق التوصيل السريع؟",
+      "expected_facts": ["2"],
+      "expected_sources": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"]
+    },
+    {
+      "id": "ho-ar-tracking",
+      "language": "ar",
+      "category": "grounded",
+      "question": "هل يشمل التوصيل العادي رقم تتبع؟",
+      "expected_facts": ["تتبع"],
+      "expected_sources": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"]
+    },
+    {
+      "id": "ho-ar-hours",
+      "language": "ar",
+      "category": "grounded",
+      "question": "من أي ساعة إلى أي ساعة يعمل فريق الدعم؟",
+      "expected_facts": ["9", "17"],
+      "expected_sources": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"]
+    },
+    {
+      "id": "ho-ar-refund-dest",
+      "language": "ar",
+      "category": "grounded",
+      "question": "إلى أين يعاد مبلغ الاسترداد؟",
+      "expected_facts": ["الدفع", "الأصلية"],
+      "expected_sources": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"]
+    },
+    {
+      "id": "ho-ar-oos-mountain",
+      "language": "ar",
+      "category": "out_of_scope",
+      "question": "ما أعلى جبل في العالم؟"
+    },
+    {
+      "id": "ho-ar-oos-play",
+      "language": "ar",
+      "category": "out_of_scope",
+      "question": "من كتب مسرحية روميو وجولييت؟"
+    },
+    {
+      "id": "ho-ar-oos-boiling",
+      "language": "ar",
+      "category": "out_of_scope",
+      "question": "عند أي درجة حرارة يغلي الماء عند مستوى سطح البحر؟"
+    },
+    {
+      "id": "ho-ar-nc-return-cost",
+      "language": "ar",
+      "category": "not_covered",
+      "question": "من يتحمل تكلفة شحن الإرجاع عندما أعيد منتجا؟"
+    },
+    {
+      "id": "ho-ar-nc-bulk",
+      "language": "ar",
+      "category": "not_covered",
+      "question": "هل تقدمون خصما للطلبات بالجملة؟"
+    },
+    {
+      "id": "ho-ar-nc-phone",
+      "language": "ar",
+      "category": "not_covered",
+      "question": "ما رقم هاتف الدعم لديكم؟"
+    }
+  ]
+}

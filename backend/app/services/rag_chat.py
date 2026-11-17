@@ -137,10 +137,13 @@ def pre_llm_refusal(
     threshold. Not covered: sources retrieved above the lower threshold but
     below RETRIEVAL_MIN_SCORE — company-related, so the handoff is offered.
     None means the strong sources go to the LLM.
+
+    The decision uses the best pre-rerank cosine similarity across hits, not
+    hits[0], because a reranker may reorder candidates by its own probability.
     """
     if looks_like_injection(question) or not hits:
         return OFF_TOPIC_ANSWER[language], "off_topic"
-    if hits[0].score < settings.retrieval_min_score:
+    if max(hit.score for hit in hits) < settings.retrieval_min_score:
         return NOT_COVERED_ANSWER[language], "not_covered"
     return None
 

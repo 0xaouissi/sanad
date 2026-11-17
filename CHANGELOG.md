@@ -20,6 +20,20 @@
   with a new *related-but-not-covered* category (9 cases) scored on whether the
   handoff is offered; out-of-scope and injection cases now also assert that no
   handoff is offered. Latest real-model run: 41/42 (see docs/evaluation.md).
+- **Retrieval thresholds under reranking** — both thresholds now always compare
+  the pre-rerank dense cosine similarity. The reranker's sigmoid probability is
+  a different scale, so it only reorders candidates and is never used for the
+  refusal decision; one calibration stays valid with reranking on or off. The
+  decision uses the best cosine score across hits, not the first (reranked) hit.
+
+### Added
+
+- **Held-out evaluation** — 30 unseen questions (10 per language, including
+  related-but-not-covered) in `backend/app/eval/heldout.json`, run through the
+  identical scored path by `scripts/run_heldout.py` and reported separately from
+  the golden set. Latest real-model run: 27/30. docs/evaluation.md now states
+  that the thresholds were calibrated on the same demo documents as the golden
+  set, and documents how to re-tune both thresholds on your own corpus.
 
 ## 0.1.0 — 2026-11-16
 

@@ -84,7 +84,28 @@ async def test_other_company_chunks_are_invisible(client) -> None:
     assert hits == []
 
 
-async def test_reranker_rescores_and_reorders(client) -> None:
+async def test_reranker_reorders_but_score_stays_cosine(client) -> None:
+    api_key = await _company_with_policy(client)
+    reranker = FakeReranker()
+    async with get_session_factory()() as session:
+        hits = await retrieve(
+            session, await _owner_id(api_key), "refund shipping delivery",
+            FakeEmbedder(), get_settings(), reranker,
+        )
+    assert reranker.calls, "reranker was not called"
+    # The reranker prefers the refund chunk (0.9), so it is ordered first.
+    assert hits[0].heading == "Refund policy"
+    assert hits[0].rank_score == 0.9
+    # Ordering follows the reranker probability, descending.
+    ranks = [hit.rank_score for hit in hits]
+    assert ranks == sorted(ranks, reverse=True)
+    # score stays the pre-rerank cosine similarity, never the reranker value,
+    # and the threshold compares that cosine score.
+    assert hits[0].score != 0.9
+    assert all(hit.score >= get_settings().retrieval_min_score for hit in hits)
+
+
+async def test_threshold_ignores_reranker_score(client) -> None:
     api_key = await _company_with_policy(client)
     reranker = FakeReranker()
     async with get_session_factory()() as session:
@@ -93,6 +114,9 @@ async def test_reranker_rescores_and_reorders(client) -> None:
             FakeEmbedder(), get_settings(), reranker,
         )
     assert reranker.calls, "reranker was not called"
-    assert hits[0].heading == "Refund policy"
-    assert hits[0].score == 0.9
+    # The refund chunk has no dense overlap with this query (cosine below the
+    # threshold) even though the reranker scores it 0.9; it must be dropped,
+    # proving the threshold uses the pre-rerank cosine, not the reranker score.
+    assert all(hit.heading != "Refund policy" for hit in hits)
+    assert hits and hits[0].heading == "Shipping policy"
     assert all(hit.score >= get_settings().retrieval_min_score for hit in hits)

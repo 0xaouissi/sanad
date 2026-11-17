@@ -21,7 +21,10 @@ live chat, then is scored deterministically:
 
 The two refusal kinds are separated by two retrieval thresholds
 (`RETRIEVAL_MIN_SCORE=0.43`, `RETRIEVAL_OFF_TOPIC_SCORE=0.41`); see
-[chat.md](chat.md) for the full decision path.
+[chat.md](chat.md) for the full decision path. Both thresholds compare the
+**pre-rerank dense cosine similarity**, even when the reranker is enabled —
+the reranker only reorders candidates, so the same calibration holds with
+reranking on or off (see [hardware-tiers.md](hardware-tiers.md#reranker-per-tier)).
 
 The golden set lives in [backend/app/eval/golden.json](../backend/app/eval/golden.json)
 and targets the trilingual demo policies in [samples/](../samples/) (identical
@@ -63,6 +66,106 @@ known facts; it says nothing about general accuracy, long documents or your
 corpus. Re-run it on your own documents after uploading them, and treat a
 drop as a signal to inspect the failed cases (the page lists each failed
 check), not as a verdict.
+
+## Calibration caveat
+
+The two thresholds were calibrated on the **same three demo policies** that
+the golden questions target (off-topic ≤ 0.3956, related-but-not-covered
+≥ 0.4349, in-scope ≥ 0.45, measured with real BGE-M3). The golden results
+therefore measure the pipeline **on its calibration corpus** — an upper
+bound, not a generalization estimate. A different corpus has a different
+score distribution, and the same numbers may separate the cases less
+cleanly. The held-out set below probes unseen phrasings on the same docs;
+for your own documents, re-tune the thresholds (see below).
+
+## Held-out questions (unseen)
+
+**30 additional questions — 10 per language** (4 grounded, 3 out-of-scope,
+3 related-but-not-covered) that were **not** used to calibrate the thresholds
+and do not overlap the golden set. They run through the identical retrieval +
+prompt + model path, are scored deterministically, and are reported
+**separately** from the golden results. They live in
+[backend/app/eval/heldout.json](../backend/app/eval/heldout.json).
+
+Run them (demo company seeded, Ollama up, from the repo root):
+
+```bash
+PYTHONIOENCODING=utf-8 backend/.venv/Scripts/python.exe scripts/run_heldout.py
+```
+
+The script writes nothing to the dashboard eval state, conversations, cache
+or metrics; it prints each case (with the answer on failure) and a
+per-language / per-category summary.
+
+Latest run — real models, small tier, reranker off, same thresholds,
+2026-11-17:
+
+| Language | Questions | Passed | Model | Tier |
+|----------|-----------|--------|-------|------|
+| English  | 10 | 8 | `qwen2.5:3b-instruct-q4_K_M` | small |
+| French   | 10 | 10 | `qwen2.5:3b-instruct-q4_K_M` | small |
+| Arabic   | 10 | 9 | `qwen2.5:3b-instruct-q4_K_M` | small |
+
+| Category | Questions | Passed |
+|----------|-----------|--------|
+| Grounded facts + citations | 12 | 11 |
+| Out-of-scope refusals (no handoff) | 9 | 9 |
+| Related-but-not-covered (handoff offered) | 9 | 7 |
+
+**Total: 27 / 30 passed.** The three misses, reported honestly:
+
+- `ho-en-refund-dest` (grounded, "Where is my refund sent?") — the 3B model
+  returned the "couldn't find" refusal even though the documents state refunds
+  go to the original payment method: an **over-refusal** on an answerable
+  question.
+- `ho-en-nc-return-cost` (not-covered, "Who pays for return shipping?") — the
+  model recognized the information is absent but **paraphrased** the refusal
+  ("The sources provided do not contain information about who pays for return
+  shipping. [1]") instead of the exact required template, so it scored as a
+  grounded answer with a citation and the handoff was **not** offered.
+- `ho-ar-nc-return-cost` (not-covered, same question in Arabic) — the model
+  **recited the retrieved shipping policy** instead of refusing: a grounding
+  failure.
+
+The pattern is the small tier's weaker grounding and prompt adherence on
+unseen phrasings: it sometimes over-refuses, sometimes paraphrases the refusal
+(missing the handoff trigger), and sometimes recites sources instead of
+refusing. A larger tier and/or the reranker reduce these. The held-out set
+exists to surface exactly this gap between the calibration corpus and unseen
+questions — 27/30 here versus 41/42 on the golden set is the honest picture.
+
+## Re-tuning the thresholds on your own documents
+
+The defaults (0.43 / 0.41) fit the demo policies, not your corpus. To re-tune:
+
+1. **Upload your documents** and wait for ingestion to finish.
+2. **Collect real best-source cosine scores** for three groups of questions:
+   in-scope (answerable from your docs), related-but-not-covered (about your
+   business but absent from the docs), and off-topic (unrelated). The
+   `POST /api/v1/search` endpoint returns the **pre-rerank dense cosine
+   similarity** per hit, unfiltered — exactly the scale the thresholds use:
+
+   ```bash
+   curl -X POST http://localhost:8000/api/v1/search \
+     -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+     -d '{"query": "your question", "top_k": 3}'
+   ```
+
+   Take the highest `score` per question (the reranker is not applied here, so
+   these are the calibration scores regardless of `RERANK_ENABLED`).
+3. **Place the thresholds in the gaps.** Set `RETRIEVAL_OFF_TOPIC_SCORE`
+   between the highest off-topic score and the lowest related-but-not-covered
+   score; set `RETRIEVAL_MIN_SCORE` at/above the lowest related-but-not-covered
+   score and below the typical in-scope score. Keep
+   `RETRIEVAL_OFF_TOPIC_SCORE ≤ RETRIEVAL_MIN_SCORE` (the config validator
+   enforces this).
+4. **Set both in `.env`, restart, and re-run** the golden and held-out sets on
+   your documents. Inspect the failed cases and adjust:
+   - related questions wrongly refused as off-topic → **lower** `OFF_TOPIC`;
+   - absent facts answered (hallucinated) instead of refused → **raise** `MIN_SCORE`;
+   - answerable questions refused as not-covered → **lower** `MIN_SCORE`.
+5. **Re-check after any embedding-model or chunking change**, since those shift
+   the whole score distribution.
 
 ## Sample company
 

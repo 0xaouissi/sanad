@@ -151,6 +151,17 @@ def test_pre_llm_refusal_strong_hits_go_to_the_llm() -> None:
     assert [hit.score for hit in strong_hits(hits, _settings())] == [0.6]
 
 
+def test_pre_llm_refusal_uses_best_cosine_when_reranker_reorders() -> None:
+    # The reranker ordered the weaker-cosine chunk first (rank_score 0.9 vs
+    # 0.1). The refusal decision must still use the best pre-rerank cosine
+    # (0.6 >= min 0.5), so the question goes to the LLM, not refused.
+    weak = replace(_hit(1, score=0.4), rank_score=0.9)
+    strong = replace(_hit(2, score=0.6), rank_score=0.1)
+    hits = [weak, strong]
+    assert pre_llm_refusal(hits, "How long is the refund window?", "en", _settings()) is None
+    assert [hit.score for hit in strong_hits(hits, _settings())] == [0.6]
+
+
 def test_context_strips_injection_sentences_but_keeps_policy() -> None:
     hit = replace(
         _hit(1),

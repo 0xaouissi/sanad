@@ -4,6 +4,11 @@ optional cross-encoder rerank, then a relevance threshold.
 Below-threshold results are dropped so the chat layer can refuse instead of
 hallucinating from weakly related chunks. Callers may lower the threshold
 (min_score) to inspect near-misses and classify the refusal kind themselves.
+
+The reranker only reorders candidates (RetrievalHit.rank_score); the threshold
+always compares the pre-rerank dense cosine similarity (RetrievalHit.score),
+because the cross-encoder sigmoid probability is a different, uncalibrated
+scale. This keeps one set of thresholds valid with reranking on or off.
 """
 
 import uuid
@@ -30,7 +35,18 @@ class RetrievalHit:
     page_number: int | None
     heading: str | None
     content: str
+    # Pre-rerank dense cosine similarity. This is the calibrated relevance
+    # scale RETRIEVAL_MIN_SCORE / RETRIEVAL_OFF_TOPIC_SCORE compare against,
+    # whether or not a reranker is enabled.
     score: float
+    # Reranker relevance probability when reranking is on, else None. Used only
+    # to order candidates; never compared against the thresholds, because the
+    # cross-encoder sigmoid is a different scale than cosine similarity.
+    rank_score: float | None = None
+
+    @property
+    def order_score(self) -> float:
+        return self.score if self.rank_score is None else self.rank_score
 
 
 def rrf_fuse(rankings: list[list[uuid.UUID]], k: int = RRF_K) -> dict[uuid.UUID, float]:
@@ -112,11 +128,14 @@ async def retrieve(
     if reranker is not None:
         scores = await reranker.rerank(query, [hit.content for hit in hits])
         hits = [
-            replace(hit, score=round(score, 4))
+            replace(hit, rank_score=round(score, 4))
             for hit, score in zip(hits, scores, strict=True)
         ]
 
-    hits.sort(key=lambda hit: hit.score, reverse=True)
+    # Order by the reranker probability when present, else by cosine similarity.
+    hits.sort(key=lambda hit: hit.order_score, reverse=True)
+    # Thresholds always compare the pre-rerank cosine similarity (hit.score),
+    # the scale they are calibrated on — never the reranker sigmoid.
     threshold = settings.retrieval_min_score if min_score is None else min_score
     hits = [hit for hit in hits if hit.score >= threshold]
     return hits[: settings.retrieval_top_k]

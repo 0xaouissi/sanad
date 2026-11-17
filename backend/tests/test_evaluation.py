@@ -1,12 +1,19 @@
 """Unit tests: golden dataset integrity and deterministic scoring (no LLM)."""
 
 import uuid
+from pathlib import Path
 
-from app.eval.golden import GoldenCase, golden_summary, load_golden, samples_dir
+import app.eval.golden as golden_mod
+from app.eval.golden import GoldenCase, GoldenSet, golden_summary, load_golden, samples_dir
 from app.eval.scoring import normalize_for_match, score_case, summarize
 from app.rag.injection import looks_like_injection
 from app.schemas.chat import Citation
 from app.services.rag_chat import NOT_COVERED_ANSWER, OFF_TOPIC_ANSWER
+
+
+def _load_heldout() -> GoldenSet:
+    path = Path(golden_mod.__file__).parent / "heldout.json"
+    return GoldenSet.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 def _citation(filename: str) -> Citation:
@@ -234,3 +241,30 @@ class TestSummary:
         assert summary["per_language"]["fr"] == {"total": 1, "passed": 0}
         assert summary["per_category"]["grounded"] == {"total": 2, "passed": 1}
         assert summary["per_category"]["out_of_scope"] == {"total": 1, "passed": 1}
+
+
+class TestHeldoutSet:
+    def test_ten_unseen_questions_per_language(self):
+        heldout = _load_heldout()
+        assert len(heldout.cases) == 30
+        per_language: dict[str, int] = {}
+        for case in heldout.cases:
+            per_language[case.language] = per_language.get(case.language, 0) + 1
+        assert per_language == {"en": 10, "fr": 10, "ar": 10}
+
+    def test_disjoint_from_golden_ids_and_questions(self):
+        golden = load_golden()
+        golden_ids = {c.id for c in golden.cases}
+        golden_questions = {c.question for c in golden.cases}
+        for case in _load_heldout().cases:
+            assert case.id not in golden_ids, case.id
+            assert case.question not in golden_questions, case.id
+
+    def test_every_language_includes_related_but_not_covered(self):
+        heldout = _load_heldout()
+        for language in ("ar", "fr", "en"):
+            categories = {c.category for c in heldout.cases if c.language == language}
+            assert {"grounded", "out_of_scope", "not_covered"} <= categories, language
+
+    def test_targets_the_same_demo_documents(self):
+        assert _load_heldout().documents == load_golden().documents

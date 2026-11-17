@@ -21,12 +21,16 @@ Response: `answer`, `language`, `conversation_id`, `message_id`, `citations`
 - **Hybrid retrieval** — dense BGE-M3 similarity + PostgreSQL full-text
   keyword search, fused with reciprocal rank fusion. On medium/large tiers a
   local cross-encoder (`bge-reranker-v2-m3`) re-ranks the top candidates;
-  off by default on the small tier, override with `RERANK_ENABLED`.
+  off by default on the small tier, override with `RERANK_ENABLED`. The
+  reranker only **reorders** candidates: its sigmoid relevance probability is
+  a different scale than cosine similarity, so the refusal thresholds below
+  always compare the **pre-rerank dense cosine score**, with reranking on or
+  off. One calibration stays valid either way.
 - **Two refusal kinds** — retrieval uses two thresholds. Below
   `RETRIEVAL_OFF_TOPIC_SCORE` (default 0.41) a question is treated as
   **off-topic**; between that and `RETRIEVAL_MIN_SCORE` (default 0.43) it is
   **company-related but not covered**. Both thresholds are calibrated on real
-  BGE-M3 scores and `RETRIEVAL_OFF_TOPIC_SCORE` must be ≤ `RETRIEVAL_MIN_SCORE`.
+  BGE-M3 cosine scores and `RETRIEVAL_OFF_TOPIC_SCORE` must be ≤ `RETRIEVAL_MIN_SCORE`.
   See [Refusals and the human handoff](#refusals-and-the-human-handoff) below.
 - **Strict grounding** — the prompt forbids outside knowledge and requires
   inline `[n]` citations; the response maps them to document name + page.
@@ -51,8 +55,10 @@ Both replies are localized into Arabic and French. The decision path:
 
 1. Retrieve with the lower `RETRIEVAL_OFF_TOPIC_SCORE` floor.
 2. **Injection attempt or no hits** → `off_topic`, the LLM is never called.
-3. **Best hit below `RETRIEVAL_MIN_SCORE`** → `not_covered`, the LLM is never
-   called (the question is related but the sources are too weak to answer).
+3. **Best pre-rerank cosine score below `RETRIEVAL_MIN_SCORE`** → `not_covered`,
+   the LLM is never called (the question is related but the sources are too
+   weak to answer). "Best" is the highest cosine similarity across the retrieved
+   hits, not the first hit, because a reranker may reorder them.
 4. Otherwise keep only hits at/above `RETRIEVAL_MIN_SCORE` and call the LLM.
    If it leaks the system prompt → `off_topic`; if it returns the localized
    "couldn't find" template → `not_covered`; else it is a grounded answer

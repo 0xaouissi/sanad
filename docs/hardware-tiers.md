@@ -76,6 +76,13 @@ latency. First use downloads the weights into `HF_HOME`:
 huggingface-cli download BAAI/bge-reranker-v2-m3
 ```
 
+**Score scale.** The reranker returns a sigmoid relevance probability, which is
+a different, more polarized scale than the dense cosine similarity. It is used
+**only to reorder** the candidates handed to the LLM. The refusal thresholds
+(`RETRIEVAL_MIN_SCORE`, `RETRIEVAL_OFF_TOPIC_SCORE`) always compare the
+**pre-rerank cosine similarity**, so the same calibration is valid whether
+reranking is on or off — no separate reranker thresholds are needed.
+
 ## Latency targets
 
 Time to first streamed token, measured and logged per request (`chat_latency`
@@ -109,8 +116,8 @@ The E2E suite asserts the budget on the running tier.
 | `RERANK_MODEL` | `BAAI/bge-reranker-v2-m3` | Cross-encoder reranker |
 | `RERANK_CANDIDATES` | `8` | Hybrid candidates re-scored by the reranker |
 | `RETRIEVAL_TOP_K` | `5` | Chunks passed to the LLM as numbered sources |
-| `RETRIEVAL_MIN_SCORE` | `0.43` | At/above: strong source. Below: related-but-not-covered refusal + handoff |
-| `RETRIEVAL_OFF_TOPIC_SCORE` | `0.41` | Below: off-topic refusal (no handoff). Must be ≤ `RETRIEVAL_MIN_SCORE` |
+| `RETRIEVAL_MIN_SCORE` | `0.43` | Pre-rerank cosine. At/above: strong source. Below: related-but-not-covered refusal + handoff |
+| `RETRIEVAL_OFF_TOPIC_SCORE` | `0.41` | Pre-rerank cosine. Below: off-topic refusal (no handoff). Must be ≤ `RETRIEVAL_MIN_SCORE` |
 | `MEMORY_MAX_TURNS` | `6` | Past messages replayed per conversation (0 = off) |
 
 ## VRAM notes for the small tier (4 GB)
