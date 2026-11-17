@@ -16,6 +16,9 @@ widget, API or schema changes.
   the Arabic RTL layout mirrors correctly, plus a responsive mobile layout.
   CSS-only — no React logic, selectors or behaviour changed; all 8 dashboard
   browser tests still pass.
+- **Demo GIF** — `docs/demo-dashboard.gif` re-recorded so the README shows the
+  redesigned dashboard (login, Documents, Evaluation, Handoffs, Settings and
+  the Arabic RTL view). The widget GIF is unchanged.
 
 ### Security
 
