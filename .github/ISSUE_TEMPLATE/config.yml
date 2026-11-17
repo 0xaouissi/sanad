@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/0xaouissi/sanad/tree/main/docs
+    about: Read the topic guides (chat, widget, evaluation, deployment…) first.
+  - name: Security vulnerability
+    url: https://github.com/0xaouissi/sanad/security/policy
+    about: Report security issues privately via the Security policy — not as public issues.
