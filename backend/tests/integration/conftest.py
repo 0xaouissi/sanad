@@ -62,8 +62,10 @@ async def db_ready(monkeypatch: MonkeyPatch, tmp_path) -> AsyncIterator[None]:
     monkeypatch.setenv("ADMIN_API_KEY", ADMIN_KEY)
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     # FakeEmbedder's bag-of-words cosine scores are much lower than real BGE-M3
-    # similarities; the 0.43 default is calibrated for the real model (see e2e).
+    # similarities; the 0.43/0.41 defaults are calibrated for the real model
+    # (see e2e). Keep the lower refusal threshold below the upper one.
     monkeypatch.setenv("RETRIEVAL_MIN_SCORE", "0.1")
+    monkeypatch.setenv("RETRIEVAL_OFF_TOPIC_SCORE", "0.05")
     # Bot deterrence has dedicated tests (test_bot_check.py); the auth and
     # feedback suites exercise the site-key path without widget timing fields.
     monkeypatch.setenv("BOT_CHECK_ENABLED", "false")

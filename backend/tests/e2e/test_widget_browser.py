@@ -27,6 +27,7 @@ import asyncpg
 import httpx
 import pytest
 
+from app.services.rag_chat import NOT_COVERED_ANSWER, OFF_TOPIC_ANSWER
 from tests.conftest import ENV_KEYS
 
 # Captured at import, before the autouse clean_env fixture strips them.
@@ -636,3 +637,67 @@ async def test_handoff_form_arabic_labels_and_not_configured_error(
     await page.locator(".sanad-handoff-back").click()
     await page.locator(".sanad-handoff-view").wait_for(state="hidden")
     await page.locator(".sanad-input").wait_for(state="visible")
+
+
+async def _handoff_ticket_count(site_key: str) -> int:
+    dsn = _DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+    conn = await asyncpg.connect(dsn, timeout=5)
+    try:
+        return await conn.fetchval(
+            "SELECT count(*) FROM handoff_requests h "
+            "JOIN companies c ON c.id = h.company_id WHERE c.site_key = $1",
+            site_key,
+        )
+    finally:
+        await conn.close()
+
+
+async def test_not_covered_refusal_offers_inline_handoff_with_prefill(
+    page, widget_server, blank_site, smtp_sink
+):
+    site_dir, site_url, _ = blank_site
+    company = await setup_company(widget_server)
+    write_blank_page(site_dir, widget_server, company)
+    await _open_widget(page, site_url)
+    sink_baseline = len(smtp_sink.messages)
+
+    question = "Do you offer gift wrapping for orders?"
+    await _ask(page, question)
+    answer = await _wait_answer(page)
+    # Company-related but absent from the documents: the not-covered refusal.
+    assert answer == NOT_COVERED_ANSWER["en"], answer
+
+    offer = page.locator(".sanad-handoff-offer")
+    assert await offer.count() == 1
+    await offer.wait_for(state="visible")
+    assert await offer.inner_text() == "Talk to a human"
+    # The always-visible footer link is still there too.
+    assert await page.locator(".sanad-handoff").is_visible()
+
+    # Offering the handoff must never create a ticket on its own.
+    assert await _handoff_ticket_count(company["site_key"]) == 0
+    assert len(smtp_sink.messages) == sink_baseline
+
+    await offer.click()
+    await page.locator(".sanad-handoff-view").wait_for(state="visible")
+    # The visitor's question is prefilled, but nothing is submitted yet.
+    assert await page.locator(".sanad-handoff-textarea").input_value() == question
+    assert await _handoff_ticket_count(company["site_key"]) == 0
+    assert len(smtp_sink.messages) == sink_baseline
+
+
+async def test_off_topic_refusal_has_no_inline_handoff_offer(
+    page, widget_server, blank_site
+):
+    site_dir, site_url, _ = blank_site
+    company = await setup_company(widget_server)
+    write_blank_page(site_dir, widget_server, company)
+    await _open_widget(page, site_url)
+
+    await _ask(page, "What is the capital of France?")
+    answer = await _wait_answer(page)
+    assert answer == OFF_TOPIC_ANSWER["en"], answer
+    # Off-topic: no inline offer, only the always-visible footer link remains.
+    assert await page.locator(".sanad-handoff-offer").count() == 0
+    assert await page.locator(".sanad-handoff").is_visible()
+    assert await _handoff_ticket_count(company["site_key"]) == 0

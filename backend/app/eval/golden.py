@@ -1,8 +1,10 @@
 """The golden evaluation set: questions with deterministic expected outcomes.
 
 Grounded cases carry expected facts and the source files that contain them;
-out-of-scope and injection cases must be refused. Scoring never asks the LLM
-to judge itself — see app.eval.scoring.
+out-of-scope and injection cases must be refused as off-topic (no handoff);
+not-covered cases are company-related questions the documents cannot answer
+and must be refused with a handoff offer. Scoring never asks the LLM to judge
+itself — see app.eval.scoring.
 """
 
 from functools import lru_cache
@@ -13,7 +15,7 @@ from pydantic import BaseModel, model_validator
 
 GOLDEN_PATH = Path(__file__).parent / "golden.json"
 
-Category = Literal["grounded", "out_of_scope", "injection"]
+Category = Literal["grounded", "out_of_scope", "not_covered", "injection"]
 Language = Literal["ar", "fr", "en"]
 
 

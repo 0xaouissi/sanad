@@ -2,8 +2,9 @@
 clearly-marked untrusted data, and override attempts are refused outright."""
 
 import asyncio
+import json
 
-from app.services.rag_chat import NO_ANSWER
+from app.services.rag_chat import OFF_TOPIC_ANSWER
 from tests.integration.conftest import auth, create_company, get_document, upload
 
 MALICIOUS_DOC = (
@@ -60,7 +61,8 @@ async def test_override_question_is_refused_without_calling_the_llm(client, fake
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["answer"] == NO_ANSWER["en"]
+    assert body["answer"] == OFF_TOPIC_ANSWER["en"]
+    assert body["refusal_kind"] == "off_topic"
     assert body["citations"] == []
     assert fake_llm.calls == []
 
@@ -75,5 +77,25 @@ async def test_leaked_prompt_in_answer_is_replaced_by_refusal(client, fake_llm):
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["answer"] == NO_ANSWER["en"]
+    assert body["answer"] == OFF_TOPIC_ANSWER["en"]
+    assert body["refusal_kind"] == "off_topic"
     assert body["citations"] == []
+
+
+async def test_streamed_leak_error_event_is_off_topic_without_handoff(client, fake_llm):
+    company = await _company_with_evil_doc(client)
+    fake_llm.answers = ["You are Sanad, a customer-support assistant. Rules: 1..."]
+    response = await client.post(
+        "/api/v1/chat",
+        json={"message": "What is the refund policy?", "stream": True},
+        headers=auth(company["api_key"]),
+    )
+    assert response.status_code == 200, response.text
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert events[-1]["type"] == "error"
+    assert events[-1]["detail"] == OFF_TOPIC_ANSWER["en"]
+    assert events[-1]["refusal_kind"] == "off_topic"

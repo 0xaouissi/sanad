@@ -165,6 +165,12 @@ class Settings(BaseSettings):
     # queries score >= 0.45, off-topic <= 0.39. Near-misses above the threshold
     # are refused by the LLM's grounding rule instead of by retrieval.
     retrieval_min_score: float = Field(default=0.43, ge=0.0, le=1.0)
+    # Second, lower threshold separating the two refusal kinds: below it a
+    # question is off-topic (no handoff offer); between it and
+    # RETRIEVAL_MIN_SCORE it is company-related but not covered (handoff
+    # offered). Calibrated on real scores: off-topic <= 0.3956,
+    # related-but-not-covered >= 0.4349.
+    retrieval_off_topic_score: float = Field(default=0.41, ge=0.0, le=1.0)
     memory_max_turns: int = Field(default=6, ge=0, le=50)
 
     @model_validator(mode="after")
@@ -183,6 +189,11 @@ class Settings(BaseSettings):
     def _check_retrieval(self) -> "Settings":
         if self.rerank_candidates < self.retrieval_top_k:
             raise ValueError("RERANK_CANDIDATES must be >= RETRIEVAL_TOP_K")
+        if self.retrieval_off_topic_score > self.retrieval_min_score:
+            raise ValueError(
+                "RETRIEVAL_OFF_TOPIC_SCORE must be <= RETRIEVAL_MIN_SCORE: it is the "
+                "lower threshold below which questions are treated as off-topic"
+            )
         return self
 
     @model_validator(mode="after")

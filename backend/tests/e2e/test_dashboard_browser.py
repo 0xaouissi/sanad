@@ -346,7 +346,7 @@ async def test_evaluation_tab_counts_and_owner_only_run(page, dashboard_server):
     await page.locator("#golden-languages").wait_for(state="visible")
     for code in ("en", "fr", "ar"):
         row = page.locator("#golden-languages tr", has_text=code)
-        assert "11" in await row.inner_text()
+        assert "14" in await row.inner_text()
     await page.get_by_text("Demo documents missing").wait_for(state="visible")
     await page.get_by_text("No evaluation yet").wait_for(state="visible")
     assert await page.locator("#run-eval").count() == 1

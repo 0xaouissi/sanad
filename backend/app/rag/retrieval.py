@@ -1,8 +1,9 @@
 """Hybrid retrieval: dense vectors + keyword full-text search, RRF fusion,
 optional cross-encoder rerank, then a relevance threshold.
 
-Below-threshold results are dropped so the chat layer can answer "I don't know"
-instead of hallucinating from weakly related chunks.
+Below-threshold results are dropped so the chat layer can refuse instead of
+hallucinating from weakly related chunks. Callers may lower the threshold
+(min_score) to inspect near-misses and classify the refusal kind themselves.
 """
 
 import uuid
@@ -48,6 +49,7 @@ async def retrieve(
     embedder: EmbeddingProvider,
     settings: Settings,
     reranker: RerankProvider | None = None,
+    min_score: float | None = None,
 ) -> list[RetrievalHit]:
     normalized = normalize_arabic(query)
     vectors = await embedder.embed([normalized])
@@ -115,5 +117,6 @@ async def retrieve(
         ]
 
     hits.sort(key=lambda hit: hit.score, reverse=True)
-    hits = [hit for hit in hits if hit.score >= settings.retrieval_min_score]
+    threshold = settings.retrieval_min_score if min_score is None else min_score
+    hits = [hit for hit in hits if hit.score >= threshold]
     return hits[: settings.retrieval_top_k]

@@ -4,6 +4,7 @@ import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from app.eval.golden import load_golden
 from app.providers.kv.memory import MemoryKVStore
 from app.services.evaluation import get_eval_state, start_eval
 
@@ -14,7 +15,7 @@ async def test_start_eval_claims_once() -> None:
     assert await start_eval(kv, company_id) is True
     state = await get_eval_state(kv, company_id)
     assert state["status"] == "running"
-    assert state["total"] == 33
+    assert state["total"] == len(load_golden().cases)
     assert await start_eval(kv, company_id) is False
 
 

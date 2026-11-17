@@ -17,7 +17,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.db.models import Chunk, Document
 from app.db.session import get_session_factory
-from app.services.rag_chat import NO_ANSWER
+from app.services.rag_chat import OFF_TOPIC_ANSWER, is_no_answer
 
 from .conftest import ADMIN_KEY
 
@@ -170,28 +170,29 @@ async def test_crawl_then_chat_trilingual(live_rag: AsyncClient, trilingual_site
 
     en = await ask("How many days do I have to request a refund?")
     assert en["language"] == "en"
-    assert en["answer"] != NO_ANSWER["en"]
+    assert not is_no_answer(en["answer"], "en")
     assert "30" in en["answer"], en["answer"]
     assert en["citations"] and en["citations"][0]["filename"].startswith("refunds-")
 
     fr = await ask("Combien de temps prend la livraison standard ?")
     assert fr["language"] == "fr"
-    assert fr["answer"] != NO_ANSWER["fr"]
+    assert not is_no_answer(fr["answer"], "fr")
     assert any(ch.isdigit() for ch in fr["answer"]), fr["answer"]
     assert fr["citations"] and fr["citations"][0]["filename"].startswith("shipping-")
 
     ar = await ask("هل تبيعون بيانات العملاء؟")
     assert ar["language"] == "ar"
-    assert ar["answer"] != NO_ANSWER["ar"]
+    assert not is_no_answer(ar["answer"], "ar")
     assert _has_arabic(ar["answer"]), ar["answer"]
     assert ar["citations"] and ar["citations"][0]["filename"].startswith("privacy-")
 
     # Cross-language: French question, English-only source (approved prompt fix).
     cross = await ask("Combien de jours ai-je pour demander un remboursement ?")
     assert cross["language"] == "fr"
-    assert cross["answer"] != NO_ANSWER["fr"], cross["answer"]
+    assert not is_no_answer(cross["answer"], "fr"), cross["answer"]
     assert cross["citations"] and cross["citations"][0]["filename"].startswith("refunds-")
 
     oos = await ask("What is the capital of France?")
-    assert oos["answer"] == NO_ANSWER["en"]
+    assert oos["answer"] == OFF_TOPIC_ANSWER["en"]
+    assert oos["refusal_kind"] == "off_topic"
     assert oos["citations"] == []

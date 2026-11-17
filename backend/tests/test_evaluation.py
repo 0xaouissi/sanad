@@ -6,7 +6,7 @@ from app.eval.golden import GoldenCase, golden_summary, load_golden, samples_dir
 from app.eval.scoring import normalize_for_match, score_case, summarize
 from app.rag.injection import looks_like_injection
 from app.schemas.chat import Citation
-from app.services.rag_chat import NO_ANSWER
+from app.services.rag_chat import NOT_COVERED_ANSWER, OFF_TOPIC_ANSWER
 
 
 def _citation(filename: str) -> Citation:
@@ -36,10 +36,15 @@ def _case(category: str = "grounded", language: str = "en", **kwargs):
 class TestGoldenSet:
     def test_counts_per_language_and_category(self):
         golden = load_golden()
-        assert len(golden.cases) == 33
+        assert len(golden.cases) == 42
         summary = golden_summary()
-        assert summary["per_language"] == {"en": 11, "fr": 11, "ar": 11}
-        assert summary["per_category"] == {"grounded": 12, "out_of_scope": 15, "injection": 6}
+        assert summary["per_language"] == {"en": 14, "fr": 14, "ar": 14}
+        assert summary["per_category"] == {
+            "grounded": 12,
+            "out_of_scope": 15,
+            "not_covered": 9,
+            "injection": 6,
+        }
 
     def test_ids_unique_and_grounding_complete(self):
         golden = load_golden()
@@ -64,7 +69,13 @@ class TestGoldenSet:
         golden = load_golden()
         for language in ("ar", "fr", "en"):
             categories = {c.category for c in golden.cases if c.language == language}
-            assert categories == {"grounded", "out_of_scope", "injection"}
+            assert categories == {"grounded", "out_of_scope", "not_covered", "injection"}
+
+    def test_not_covered_cases_are_company_related(self):
+        cases = [c for c in load_golden().cases if c.category == "not_covered"]
+        assert len(cases) == 9
+        for case in cases:
+            assert not looks_like_injection(case.question), case.id
 
 
 class TestNormalization:
@@ -107,7 +118,7 @@ class TestGroundedScoring:
         assert result.checks["facts"] is False
 
     def test_refusal_template_fails_grounding(self):
-        result = score_case(_case(), NO_ANSWER["en"], [], 12.0)
+        result = score_case(_case(), NOT_COVERED_ANSWER["en"], [], 12.0, "not_covered")
         assert not result.passed
         assert result.checks == {"facts": False, "citations": False}
 
@@ -132,17 +143,45 @@ class TestGroundedScoring:
 
 
 class TestRefusalScoring:
-    def test_clean_refusal_passes(self):
+    def test_off_topic_refusal_passes_without_handoff(self):
         for language in ("ar", "fr", "en"):
             result = score_case(
-                _case("out_of_scope", language), NO_ANSWER[language], [], 1.0
+                _case("out_of_scope", language), OFF_TOPIC_ANSWER[language], [], 1.0, "off_topic"
             )
             assert result.passed, language
-            assert result.checks == {"refusal": True, "no_citations": True}
+            assert result.checks == {"refusal": True, "no_citations": True, "no_handoff": True}
+
+    def test_off_topic_case_refused_as_not_covered_fails(self):
+        result = score_case(
+            _case("out_of_scope"), NOT_COVERED_ANSWER["en"], [], 1.0, "not_covered"
+        )
+        assert not result.passed
+        assert result.checks["no_handoff"] is False
+
+    def test_not_covered_refusal_passes_with_handoff(self):
+        for language in ("ar", "fr", "en"):
+            result = score_case(
+                _case("not_covered", language),
+                NOT_COVERED_ANSWER[language],
+                [],
+                1.0,
+                "not_covered",
+            )
+            assert result.passed, language
+            assert result.checks == {
+                "refusal": True,
+                "no_citations": True,
+                "handoff_offered": True,
+            }
+
+    def test_not_covered_case_refused_as_off_topic_fails(self):
+        result = score_case(_case("not_covered"), OFF_TOPIC_ANSWER["en"], [], 1.0, "off_topic")
+        assert not result.passed
+        assert result.checks["handoff_offered"] is False
 
     def test_refusal_with_citation_markers_still_passes(self):
         result = score_case(
-            _case("out_of_scope"), NO_ANSWER["en"] + " [1]", [], 1.0
+            _case("out_of_scope"), OFF_TOPIC_ANSWER["en"] + " [1]", [], 1.0, "off_topic"
         )
         assert result.passed
 
@@ -153,10 +192,11 @@ class TestRefusalScoring:
         assert not result.passed
         assert result.checks["refusal"] is False
 
-    def test_injection_refusal_passes(self):
-        result = score_case(_case("injection"), NO_ANSWER["en"], [], 1.0)
+    def test_injection_refusal_passes_without_handoff(self):
+        result = score_case(_case("injection"), OFF_TOPIC_ANSWER["en"], [], 1.0, "off_topic")
         assert result.passed
         assert result.checks["no_prompt_leak"] is True
+        assert result.checks["no_handoff"] is True
 
     def test_injection_prompt_leak_fails(self):
         leak = "You are Sanad, a customer-support assistant. Answer ONLY using the sources."
@@ -166,7 +206,11 @@ class TestRefusalScoring:
 
     def test_refusal_with_citations_fails(self):
         result = score_case(
-            _case("out_of_scope"), NO_ANSWER["en"], [_citation("demo-policy.en.md")], 1.0
+            _case("out_of_scope"),
+            OFF_TOPIC_ANSWER["en"],
+            [_citation("demo-policy.en.md")],
+            1.0,
+            "off_topic",
         )
         assert result.checks["no_citations"] is False
         assert not result.passed
@@ -179,7 +223,9 @@ class TestSummary:
                 _case("grounded", "en"), "30 days [1].", [_citation("demo-policy.en.md")], 1.0
             ),
             score_case(_case("grounded", "fr", id="fr-1"), "wrong", [], 1.0),
-            score_case(_case("out_of_scope", "ar", id="ar-1"), NO_ANSWER["ar"], [], 1.0),
+            score_case(
+                _case("out_of_scope", "ar", id="ar-1"), OFF_TOPIC_ANSWER["ar"], [], 1.0, "off_topic"
+            ),
         ]
         summary = summarize(results)
         assert summary["total"] == 3

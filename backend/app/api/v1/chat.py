@@ -86,4 +86,5 @@ async def chat(
         conversation_id=outcome.conversation_id,
         message_id=outcome.message_id,
         citations=outcome.citations,
+        refusal_kind=outcome.refusal_kind,
     )

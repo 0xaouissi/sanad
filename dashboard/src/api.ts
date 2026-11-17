@@ -76,6 +76,7 @@ export interface EvalCaseResult {
   answer: string;
   sources: string[];
   duration_ms: number;
+  refusal_kind?: "off_topic" | "not_covered" | null;
 }
 
 export interface EvalBucket {

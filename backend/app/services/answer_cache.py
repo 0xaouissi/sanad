@@ -28,7 +28,8 @@ def answer_cache_key(
     company_id: uuid.UUID, language: str, question: str, epoch: int
 ) -> str:
     digest = hashlib.sha256(question.encode("utf-8")).hexdigest()
-    return f"chat:{company_id}:{language}:{digest}:{epoch}"
+    # v2: payloads carry refusal_kind; v1 entries predate the refusal split.
+    return f"chat:v2:{company_id}:{language}:{digest}:{epoch}"
 
 
 async def bump_doc_epoch(kv: KVStore, company_id: uuid.UUID) -> None:

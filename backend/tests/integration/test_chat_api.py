@@ -1,5 +1,6 @@
-"""Grounded chat endpoint: auth, citations, don't-know rule, memory, language
-retry, streaming metadata — real PostgreSQL, fake embeddings and scripted LLM."""
+"""Grounded chat endpoint: auth, citations, the two refusal kinds, memory,
+language retry, streaming metadata — real PostgreSQL, fake embeddings and
+scripted LLM."""
 
 import json
 import uuid
@@ -7,7 +8,8 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
-from app.services.rag_chat import NO_ANSWER
+from app.core.config import get_settings
+from app.services.rag_chat import NOT_COVERED_ANSWER, OFF_TOPIC_ANSWER
 from tests.integration.conftest import ScriptedLLM, auth, create_company, upload
 
 POLICY = """# Refund policy
@@ -74,6 +76,7 @@ async def test_grounded_answer_with_citations(
     assert body["citations"][0]["filename"] == "policy.md"
     assert body["citations"][0]["heading"] == "Refund policy"
     assert body["citations"][0]["index"] == 1
+    assert body["refusal_kind"] is None
     system = fake_llm.calls[0][0]
     assert system.role == "system"
     assert "ONLY using the numbered sources" in system.content
@@ -88,7 +91,7 @@ async def test_grounded_answer_with_citations(
         ("ما هي سياسة الاسترجاع؟", "ar"),
     ],
 )
-async def test_no_documents_gives_localized_dont_know(
+async def test_no_documents_gives_localized_off_topic_refusal(
     client: AsyncClient, fake_llm: ScriptedLLM, question: str, language: str
 ) -> None:
     company = await create_company(client)
@@ -97,7 +100,8 @@ async def test_no_documents_gives_localized_dont_know(
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["answer"] == NO_ANSWER[language]
+    assert body["answer"] == OFF_TOPIC_ANSWER[language]
+    assert body["refusal_kind"] == "off_topic"
     assert body["language"] == language
     assert body["citations"] == []
     assert fake_llm.calls == [], "LLM must not be called when there are no sources"
@@ -113,15 +117,39 @@ async def test_offtopic_question_below_threshold_refuses(
         headers=auth(company["api_key"]),
     )
     assert response.status_code == 200
-    assert response.json()["answer"] == NO_ANSWER["en"]
+    body = response.json()
+    assert body["answer"] == OFF_TOPIC_ANSWER["en"]
+    assert body["refusal_kind"] == "off_topic"
     assert fake_llm.calls == []
 
 
-async def test_llm_refusal_with_sources_is_canonical_and_uncited(
+async def test_near_miss_sources_refuse_as_not_covered(
+    client: AsyncClient, fake_llm: ScriptedLLM, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Scores between the two thresholds: company-related words retrieve weak
+    # sources, so the refusal must offer the handoff without calling the LLM.
+    company = await _company_with_policy(client)
+    monkeypatch.setenv("RETRIEVAL_MIN_SCORE", "0.5")
+    monkeypatch.setenv("RETRIEVAL_OFF_TOPIC_SCORE", "0.05")
+    get_settings.cache_clear()
+    response = await client.post(
+        "/api/v1/chat",
+        json={"message": "What is the refund policy?"},
+        headers=auth(company["api_key"]),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["answer"] == NOT_COVERED_ANSWER["en"]
+    assert body["refusal_kind"] == "not_covered"
+    assert body["citations"] == []
+    assert fake_llm.calls == []
+
+
+async def test_llm_refusal_with_sources_is_not_covered_and_uncited(
     client: AsyncClient, fake_llm: ScriptedLLM
 ) -> None:
     company = await _company_with_policy(client)
-    fake_llm.answers = [NO_ANSWER["en"] + " [1] [2]"]
+    fake_llm.answers = [NOT_COVERED_ANSWER["en"] + " [1] [2]"]
     response = await client.post(
         "/api/v1/chat",
         json={"message": "What is the refund policy?"},
@@ -130,15 +158,16 @@ async def test_llm_refusal_with_sources_is_canonical_and_uncited(
     assert response.status_code == 200, response.text
     body = response.json()
     assert len(fake_llm.calls) == 1, "sources were retrieved, so the LLM must be called"
-    assert body["answer"] == NO_ANSWER["en"]
+    assert body["answer"] == NOT_COVERED_ANSWER["en"]
+    assert body["refusal_kind"] == "not_covered"
     assert body["citations"] == [], "a refusal must not cite sources"
 
 
-async def test_streamed_llm_refusal_has_no_citations(
+async def test_streamed_llm_refusal_has_no_citations_and_offers_handoff(
     client: AsyncClient, fake_llm: ScriptedLLM
 ) -> None:
     company = await _company_with_policy(client, POLICY_FR, "politique.md")
-    fake_llm.answers = [NO_ANSWER["fr"] + " [1]"]
+    fake_llm.answers = [NOT_COVERED_ANSWER["fr"] + " [1]"]
     response = await client.post(
         "/api/v1/chat",
         json={"message": "Quelle est la politique de remboursement ?", "stream": True},
@@ -148,6 +177,27 @@ async def test_streamed_llm_refusal_has_no_citations(
     events = _events(response.text)
     assert events[-1]["type"] == "done"
     assert events[-1]["citations"] == []
+    assert events[-1]["refusal_kind"] == "not_covered"
+
+
+async def test_refusal_kind_survives_the_answer_cache(
+    client: AsyncClient, fake_llm: ScriptedLLM
+) -> None:
+    company = await create_company(client)
+    headers = auth(company["api_key"])
+    first = await client.post(
+        "/api/v1/chat", json={"message": "What is the weather in Tokyo?"}, headers=headers
+    )
+    second = await client.post(
+        "/api/v1/chat", json={"message": "What is the weather in Tokyo?"}, headers=headers
+    )
+    assert first.json()["refusal_kind"] == "off_topic"
+    assert second.json() == first.json() | {
+        "conversation_id": second.json()["conversation_id"],
+        "message_id": second.json()["message_id"],
+    }
+    assert second.json()["refusal_kind"] == "off_topic"
+    assert fake_llm.calls == []
 
 
 async def test_conversation_memory_replays_history(
@@ -274,6 +324,7 @@ async def test_streaming_tokens_and_done_metadata(
     assert done["language"] == "en"
     assert uuid.UUID(done["conversation_id"])
     assert done["citations"][0]["filename"] == "policy.md"
+    assert done["refusal_kind"] is None
 
 
 async def test_streaming_wrong_language_retried(
@@ -296,7 +347,7 @@ async def test_streaming_wrong_language_retried(
     assert events[-1]["type"] == "done"
 
 
-async def test_streaming_dont_know_is_localized(
+async def test_streaming_off_topic_refusal_is_localized(
     client: AsyncClient, fake_llm: ScriptedLLM
 ) -> None:
     company = await create_company(client)
@@ -307,8 +358,9 @@ async def test_streaming_dont_know_is_localized(
     )
     events = _events(response.text)
     answer = "".join(e["content"] for e in events if e["type"] == "token")
-    assert answer == NO_ANSWER["ar"]
+    assert answer == OFF_TOPIC_ANSWER["ar"]
     assert events[-1]["language"] == "ar"
+    assert events[-1]["refusal_kind"] == "off_topic"
     assert fake_llm.calls == []
 
 

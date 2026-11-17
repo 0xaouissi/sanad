@@ -26,17 +26,20 @@ from app.providers.llm import get_llm_provider
 from app.providers.llm.base import ChatMessage, LLMProvider
 from app.providers.reranker import get_rerank_provider
 from app.providers.reranker.base import RerankProvider
-from app.rag.injection import leaks_prompt, looks_like_injection
+from app.rag.injection import leaks_prompt
 from app.rag.language import detect_language
 from app.rag.retrieval import retrieve
 from app.schemas.chat import Citation
 from app.services.rag_chat import (
-    NO_ANSWER,
+    NOT_COVERED_ANSWER,
+    OFF_TOPIC_ANSWER,
     _retry_instruction,
     build_context,
     build_system_prompt,
     is_no_answer,
     parse_citations,
+    pre_llm_refusal,
+    strong_hits,
 )
 
 log = structlog.get_logger()
@@ -122,10 +125,21 @@ async def _answer_case(
     llm: LLMProvider,
     settings: Settings,
     reranker: RerankProvider | None,
-) -> tuple[str, list[Citation]]:
-    hits = await retrieve(session, company.id, case.question, embedder, settings, reranker)
-    if not hits or looks_like_injection(case.question):
-        return NO_ANSWER[case.language], []
+) -> tuple[str, list[Citation], str | None]:
+    hits = await retrieve(
+        session,
+        company.id,
+        case.question,
+        embedder,
+        settings,
+        reranker,
+        min_score=settings.retrieval_off_topic_score,
+    )
+    refusal = pre_llm_refusal(hits, case.question, case.language, settings)
+    if refusal is not None:
+        answer, kind = refusal
+        return answer, [], kind
+    hits = strong_hits(hits, settings)
     messages = [
         ChatMessage(role="system", content=build_system_prompt(case.language, build_context(hits))),
         ChatMessage(role="user", content=case.question),
@@ -137,9 +151,11 @@ async def _answer_case(
             ChatMessage(role="user", content=_retry_instruction(case.language)),
         ]
         answer = await llm.chat(messages)
-    if leaks_prompt(answer) or is_no_answer(answer, case.language):
-        return NO_ANSWER[case.language], []
-    return answer, parse_citations(answer, hits)
+    if leaks_prompt(answer):
+        return OFF_TOPIC_ANSWER[case.language], [], "off_topic"
+    if is_no_answer(answer, case.language):
+        return NOT_COVERED_ANSWER[case.language], [], "not_covered"
+    return answer, parse_citations(answer, hits), None
 
 
 async def run_evaluation(company_id: uuid.UUID) -> None:
@@ -159,11 +175,11 @@ async def run_evaluation(company_id: uuid.UUID) -> None:
             reranker = get_rerank_provider()
             for case in load_golden().cases:
                 started = time.perf_counter()
-                answer, citations = await _answer_case(
+                answer, citations, kind = await _answer_case(
                     session, company, case, embedder, llm, settings, reranker
                 )
                 duration_ms = round((time.perf_counter() - started) * 1000, 1)
-                results.append(score_case(case, answer, citations, duration_ms))
+                results.append(score_case(case, answer, citations, duration_ms, kind))
                 await _publish(kv, company_id, "running", started_at, results)
         await _publish(kv, company_id, "done", started_at, results)
         summary = summarize(results)

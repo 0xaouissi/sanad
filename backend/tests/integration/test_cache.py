@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.providers.kv import set_kv_store
 from app.providers.kv.memory import MemoryKVStore
 from app.providers.kv.redis_store import RedisKVStore
+from app.services.rag_chat import OFF_TOPIC_ANSWER
 from tests.integration.conftest import auth, create_company, get_document, upload
 
 POLICY = (
@@ -127,8 +128,9 @@ async def test_delete_document_invalidates_cache(client, fake_llm, kv_backend):
     )
     assert response.status_code == 204
     again = await _ask(client, company["api_key"])
-    # No sources left: the refusal is fresh, not the cached answer.
-    assert again["answer"].startswith("I don't know")
+    # No sources left: the off-topic refusal is fresh, not the cached answer.
+    assert again["answer"] == OFF_TOPIC_ANSWER["en"]
+    assert again["refusal_kind"] == "off_topic"
     assert again["citations"] == []
 
 

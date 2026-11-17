@@ -218,6 +218,9 @@ border-radius:8px;padding:8px;margin-top:4px;color:var(--sanad-fg);}
 .sanad-rate.sanad-selected{color:var(--sanad-accent);}
 .sanad-rate:disabled{cursor:default;opacity:.6;}
 .sanad-rate-note{font-size:12px;color:var(--sanad-muted);}
+.sanad-handoff-offer{margin-top:6px;background:none;border:1px solid var(--sanad-accent);
+color:var(--sanad-accent);border-radius:999px;padding:4px 12px;cursor:pointer;font:inherit;font-size:12px;}
+.sanad-handoff-offer:hover{background:var(--sanad-accent);color:#fff;}
 .sanad-form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--sanad-border);}
 .sanad-input{flex:1;min-width:0;border:1px solid var(--sanad-border);border-radius:999px;
 padding:8px 12px;background:var(--sanad-bg);color:var(--sanad-fg);font:inherit;outline:none;}
@@ -586,6 +589,20 @@ cursor:pointer;font:inherit;padding:8px 14px;}
 
   /* ---------- chat streaming ---------- */
 
+  // Offered only when the backend says the question is company-related but
+  // not covered by the documents. Opens the form with the question prefilled;
+  // the visitor still has to submit it — no ticket is ever sent automatically.
+  function renderHandoffOffer(wrap, question) {
+    var button = el("button", "sanad-handoff-offer", STRINGS[state.uiLang].handoff);
+    button.type = "button";
+    button.addEventListener("click", function () {
+      handoffMessage.value = question;
+      showHandoff(true);
+    });
+    wrap.appendChild(button);
+    scrollDown();
+  }
+
   function setBusy(busy) {
     state.busy = busy;
     input.disabled = busy;
@@ -679,9 +696,13 @@ cursor:pointer;font:inherit;padding:8px 14px;}
               current.content.textContent = stripMarkers(full);
               renderCitations(current.wrap, event.citations);
               if (event.message_id) renderFeedback(current.wrap, event.message_id);
+              if (event.refusal_kind === "not_covered") renderHandoffOffer(current.wrap, text);
               finish(null);
             } else if (event.type === "error") {
-              finish(String(event.detail || STRINGS[state.uiLang].error));
+              var errText = String(event.detail || STRINGS[state.uiLang].error);
+              var errWrap = ensureBot().wrap;
+              finish(errText);
+              if (event.refusal_kind === "not_covered") renderHandoffOffer(errWrap, text);
             }
           }
         }

@@ -8,11 +8,14 @@ const CHECK_LABELS: Record<string, keyof Dict> = {
   refusal: "checkRefusal",
   no_citations: "checkNoCitations",
   no_prompt_leak: "checkNoPromptLeak",
+  handoff_offered: "checkHandoffOffered",
+  no_handoff: "checkNoHandoff",
 };
 
 const CATEGORY_LABELS: Record<string, keyof Dict> = {
   grounded: "grounded",
   out_of_scope: "outOfScope",
+  not_covered: "notCovered",
   injection: "injection",
 };
 

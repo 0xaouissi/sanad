@@ -1,9 +1,11 @@
 """Step 3 acceptance: grounded live chat in ar/fr/en — real Ollama, real BGE-M3.
 
 Answers must come from the uploaded document, carry citations, and be written
-in the visitor's language. Out-of-scope questions (5 per language) must be
-refused with the localized "I don't know" + contact offer. The threshold
-separation test pins the calibration of RETRIEVAL_MIN_SCORE on real scores.
+in the visitor's language. Off-topic questions (5 per language) must be refused
+as off_topic with no handoff offer; company-related questions the documents
+cannot answer must be refused as not_covered (handoff offered). The threshold
+separation test pins the calibration of both retrieval thresholds on real
+scores.
 """
 
 import json
@@ -11,15 +13,17 @@ import time
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import func, select
 
 from app.core.config import Settings, get_settings
 from app.core.security import company_for_api_key
+from app.db.models import HandoffRequest
 from app.db.session import get_session_factory
 from app.providers.embeddings import get_embedding_provider
 from app.providers.llm.base import LLMError
 from app.providers.llm.ollama import OllamaProvider
 from app.rag.retrieval import retrieve
-from app.services.rag_chat import NO_ANSWER
+from app.services.rag_chat import NOT_COVERED_ANSWER, OFF_TOPIC_ANSWER, is_no_answer
 from tests.e2e.conftest import make_company, upload_and_wait
 
 POLICY_EN = """# Refund policy
@@ -83,6 +87,9 @@ OUT_OF_SCOPE = {
 # 2026-11-16): in-scope 0.4549..0.7936, off-topic 0.2332..0.3927. The default
 # RETRIEVAL_MIN_SCORE=0.43 sits in that gap. The two lowest in-scope queries
 # (fr privacy 0.4998, ar shipping 0.4549) were falsely refused at the old 0.55.
+# Second calibration (2026-11-17, demo corpus): off-topic <= 0.3956,
+# related-but-not-covered >= 0.4349 — RETRIEVAL_OFF_TOPIC_SCORE=0.41 sits in
+# that gap and splits the two refusal kinds.
 IN_SCOPE = [
     ("en", "How many days do I have to request a refund?"),
     ("en", "How long does standard delivery take?"),
@@ -144,7 +151,8 @@ async def test_grounded_answer_in_visitor_language(
     body = response.json()
     assert body["language"] == lang
     assert body["answer"].strip()
-    assert body["answer"] != NO_ANSWER[lang]
+    assert not is_no_answer(body["answer"], lang)
+    assert body["refusal_kind"] is None
     assert body["citations"], "grounded answer must cite the document"
     assert body["citations"][0]["filename"] == "policy-en.md"
     if lang == "ar":
@@ -193,7 +201,8 @@ async def test_out_of_scope_questions_refused(live_rag: AsyncClient, lang: str) 
         assert response.status_code == 200, response.text
         body = response.json()
         assert body["language"] == lang, question
-        assert body["answer"] == NO_ANSWER[lang], f"{question!r} -> {body['answer']!r}"
+        assert body["answer"] == OFF_TOPIC_ANSWER[lang], f"{question!r} -> {body['answer']!r}"
+        assert body["refusal_kind"] == "off_topic", question
         assert body["citations"] == [], question
 
 
@@ -218,7 +227,7 @@ async def test_followup_question_uses_conversation_memory(live_rag: AsyncClient)
     assert second.status_code == 200, second.text
     body = second.json()
     assert body["conversation_id"] == conversation_id
-    assert body["answer"] != NO_ANSWER["en"]
+    assert not is_no_answer(body["answer"], "en")
     assert body["citations"], "follow-up must still be grounded"
 
 
@@ -246,10 +255,33 @@ async def test_threshold_separates_in_scope_from_off_topic(live_rag: AsyncClient
         for lang, question in OFF_TOPIC:
             hits = await retrieve(session, company.id, question, embedder, settings, None)
             assert hits == [], f"off-topic question passed retrieval: [{lang}] {question}"
+            # Below the LOWER threshold too: off-topic, not "not covered".
+            near = await retrieve(
+                session,
+                company.id,
+                question,
+                embedder,
+                settings,
+                None,
+                min_score=settings.retrieval_off_topic_score,
+            )
+            assert near == [], f"off-topic question above off-topic score: [{lang}] {question}"
+        for lang, questions in NEAR_MISS.items():
+            for question in questions:
+                near = await retrieve(
+                    session,
+                    company.id,
+                    question,
+                    embedder,
+                    settings,
+                    None,
+                    min_score=settings.retrieval_off_topic_score,
+                )
+                assert near, f"not-covered question below off-topic score: [{lang}] {question}"
 
 
 @pytest.mark.parametrize("lang", ["en", "fr", "ar"])
-async def test_near_miss_questions_refused_by_grounding_rule(
+async def test_near_miss_questions_refused_as_not_covered(
     live_rag: AsyncClient, lang: str
 ) -> None:
     api_key = await _company_with_trilingual_policies(live_rag)
@@ -260,8 +292,47 @@ async def test_near_miss_questions_refused_by_grounding_rule(
         assert response.status_code == 200, response.text
         body = response.json()
         assert body["language"] == lang, question
-        assert body["answer"] == NO_ANSWER[lang], f"{question!r} -> {body['answer']!r}"
+        assert body["answer"] == NOT_COVERED_ANSWER[lang], f"{question!r} -> {body['answer']!r}"
+        assert body["refusal_kind"] == "not_covered", question
         assert body["citations"] == [], f"refusal must not cite sources: {question!r}"
+
+
+async def test_not_covered_refusal_never_creates_a_handoff_ticket(
+    live_rag: AsyncClient,
+) -> None:
+    api_key = await _company_with_trilingual_policies(live_rag)
+    response = await live_rag.post(
+        "/api/v1/chat",
+        json={"message": "Do you sell gift cards?"},
+        headers={"X-API-Key": api_key},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["refusal_kind"] == "not_covered"
+    async with get_session_factory()() as session:
+        count = await session.scalar(select(func.count()).select_from(HandoffRequest))
+    assert count == 0, "the visitor must submit the form; no automatic ticket"
+
+
+async def test_streamed_refusals_carry_their_kind(live_rag: AsyncClient) -> None:
+    api_key = await _company_with_trilingual_policies(live_rag)
+    headers = {"X-API-Key": api_key}
+    for question, expected_kind, template in [
+        ("Do you sell gift cards?", "not_covered", NOT_COVERED_ANSWER["en"]),
+        ("ما هي عاصمة فرنسا؟", "off_topic", OFF_TOPIC_ANSWER["ar"]),
+    ]:
+        events: list[dict] = []
+        async with live_rag.stream(
+            "POST", "/api/v1/chat", json={"message": question, "stream": True}, headers=headers
+        ) as response:
+            assert response.status_code == 200
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    events.append(json.loads(line.removeprefix("data: ")))
+        answer = "".join(e["content"] for e in events if e["type"] == "token")
+        assert answer == template, question
+        assert events[-1]["type"] == "done", question
+        assert events[-1]["refusal_kind"] == expected_kind, question
+        assert events[-1]["citations"] == [], question
 
 # Step 5a: prompt-injection defense with the real model. Each document hides
 # an override payload; normal questions must stay grounded and attack
@@ -312,7 +383,7 @@ async def test_injection_in_document_does_not_hijack_answers(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["language"] == lang
-    assert body["answer"] != NO_ANSWER[lang], body["answer"]
+    assert not is_no_answer(body["answer"], lang), body["answer"]
     assert body["citations"], "grounded answer must cite the document"
     for marker in PROMPT_MARKERS:
         assert marker not in body["answer"], f"payload leaked: {marker!r}"
@@ -321,6 +392,8 @@ async def test_injection_in_document_does_not_hijack_answers(
         "/api/v1/chat", json={"message": attack_question}, headers=headers
     )
     assert response.status_code == 200, response.text
-    answer = response.json()["answer"]
+    body = response.json()
+    assert body["refusal_kind"] == "off_topic"
+    answer = body["answer"]
     for marker in PROMPT_MARKERS:
         assert marker not in answer, f"system prompt leaked: {marker!r} in {answer!r}"

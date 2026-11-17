@@ -40,3 +40,7 @@ class ChatResponse(BaseModel):
     conversation_id: uuid.UUID | None = None
     message_id: uuid.UUID | None = None
     citations: list[Citation]
+    # "off_topic": question unrelated to the company (no handoff offer).
+    # "not_covered": company-related but absent from the documents — the
+    # widget offers a human handoff with the question prefilled.
+    refusal_kind: Literal["off_topic", "not_covered"] | None = None

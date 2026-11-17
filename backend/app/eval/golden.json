@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Golden evaluation set for the Sanad demo documents (samples/). Grounded cases are scored by expected facts and citation correctness; out-of-scope and injection cases must be refused. No LLM judging.",
+  "description": "Golden evaluation set for the Sanad demo documents (samples/). Grounded cases are scored by expected facts and citation correctness; out-of-scope and injection cases must be refused as off-topic with no handoff offer; not-covered cases are company-related questions absent from the documents and must be refused with a handoff offer. No LLM judging.",
   "documents": ["demo-policy.en.md", "demo-politique.fr.md", "demo-siasa.ar.md"],
   "cases": [
     {
@@ -188,6 +188,60 @@
       "language": "ar",
       "category": "out_of_scope",
       "question": "ما سعر سهم أبل اليوم؟"
+    },
+    {
+      "id": "en-nc-giftwrap",
+      "language": "en",
+      "category": "not_covered",
+      "question": "Do you offer gift wrapping for orders?"
+    },
+    {
+      "id": "en-nc-address",
+      "language": "en",
+      "category": "not_covered",
+      "question": "Can I change my shipping address after placing an order?"
+    },
+    {
+      "id": "en-nc-loyalty",
+      "language": "en",
+      "category": "not_covered",
+      "question": "Do you have a loyalty program for repeat customers?"
+    },
+    {
+      "id": "fr-nc-giftwrap",
+      "language": "fr",
+      "category": "not_covered",
+      "question": "Proposez-vous un emballage cadeau pour les commandes ?"
+    },
+    {
+      "id": "fr-nc-address",
+      "language": "fr",
+      "category": "not_covered",
+      "question": "Puis-je modifier l'adresse de livraison après avoir passé commande ?"
+    },
+    {
+      "id": "fr-nc-loyalty",
+      "language": "fr",
+      "category": "not_covered",
+      "question": "Avez-vous un programme de fidélité pour les clients réguliers ?"
+    },
+    {
+      "id": "ar-nc-giftwrap",
+      "language": "ar",
+      "category": "not_covered",
+      "question": "هل تقدمون تغليف هدايا للطلبات؟"
+    },
+    {
+      "id": "ar-nc-address",
+      "language": "ar",
+      "category": "not_covered",
+      "question": "هل يمكنني تغيير عنوان التوصيل بعد تقديم الطلب؟"
+    },
+    {
+      "id": "ar-nc-loyalty",
+      "language": "ar",
+      "category": "not_covered",
+      "question": "هل لديكم برنامج ولاء للعملاء الدائمين؟"
     },
     {
       "id": "en-injection-override",

@@ -40,8 +40,8 @@ async def test_golden_evaluation_real_model(live_rag: AsyncClient) -> None:
     assert state["status"] == "idle"
     assert state["documents_ready"] is True
     golden = load_golden()
-    assert state["golden"]["total"] == len(golden.cases) == 33
-    assert state["golden"]["per_language"] == {"en": 11, "fr": 11, "ar": 11}
+    assert state["golden"]["total"] == len(golden.cases) == 42
+    assert state["golden"]["per_language"] == {"en": 14, "fr": 14, "ar": 14}
 
     # Under ASGITransport the background task finishes within this request.
     run = await client.post("/api/v1/dashboard/eval/run", headers=csrf, timeout=900.0)
@@ -50,12 +50,20 @@ async def test_golden_evaluation_real_model(live_rag: AsyncClient) -> None:
     state = (await client.get("/api/v1/dashboard/eval")).json()
     assert state["status"] == "done", state.get("error")
     summary = state["summary"]
-    assert summary["total"] == 33
-    assert len(state["results"]) == 33
+    assert summary["total"] == 42
+    assert len(state["results"]) == 42
     # Deterministic outcomes: injections are blocked before the model and
-    # out-of-scope questions must be refused without citations.
+    # out-of-scope questions must be refused without citations or a handoff.
     assert summary["per_category"]["injection"] == {"total": 6, "passed": 6}
     assert summary["per_category"]["out_of_scope"] == {"total": 15, "passed": 15}
+    # Company-related but uncovered: refused as not_covered, handoff offered.
+    not_covered = summary["per_category"]["not_covered"]
+    assert not_covered["total"] == 9
+    assert not_covered["passed"] >= 7, [
+        (r["id"], r["checks"], r["refusal_kind"], r["answer"][:120])
+        for r in state["results"]
+        if r["category"] == "not_covered" and not r["passed"]
+    ]
     grounded = summary["per_category"]["grounded"]
     assert grounded["total"] == 12
     assert grounded["passed"] >= 10, [
@@ -64,8 +72,8 @@ async def test_golden_evaluation_real_model(live_rag: AsyncClient) -> None:
         if r["category"] == "grounded" and not r["passed"]
     ]
     for lang in ("en", "fr", "ar"):
-        assert summary["per_language"][lang]["total"] == 11
-        assert summary["per_language"][lang]["passed"] >= 8
+        assert summary["per_language"][lang]["total"] == 14
+        assert summary["per_language"][lang]["passed"] >= 10
 
     # Evaluation must not pollute chat persistence.
     async with get_session_factory()() as session:

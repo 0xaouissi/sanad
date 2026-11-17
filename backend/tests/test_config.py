@@ -132,6 +132,7 @@ def test_step3_retrieval_defaults() -> None:
     assert s.rerank_candidates == 8
     assert s.retrieval_top_k == 5
     assert s.retrieval_min_score == 0.43
+    assert s.retrieval_off_topic_score == 0.41
     assert s.memory_max_turns == 6
 
 
@@ -162,6 +163,18 @@ def test_rerank_candidates_must_cover_top_k() -> None:
         Settings(rerank_candidates=3, retrieval_top_k=5)
 
 
+def test_off_topic_score_must_not_exceed_min_score() -> None:
+    with pytest.raises(ValidationError, match="RETRIEVAL_OFF_TOPIC_SCORE"):
+        Settings(retrieval_min_score=0.43, retrieval_off_topic_score=0.5)
+    # Equal is allowed: every weak hit is then treated as off-topic.
+    assert Settings(retrieval_min_score=0.43, retrieval_off_topic_score=0.43)
+
+
+def test_off_topic_score_bounds() -> None:
+    with pytest.raises(ValidationError, match="retrieval_off_topic_score"):
+        Settings(retrieval_off_topic_score=1.5)
+
+
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [
@@ -178,8 +191,10 @@ def test_step3_bounds(kwargs: dict, match: str) -> None:
 def test_step3_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RERANK_ENABLED", "true")
     monkeypatch.setenv("RETRIEVAL_MIN_SCORE", "0.7")
+    monkeypatch.setenv("RETRIEVAL_OFF_TOPIC_SCORE", "0.6")
     monkeypatch.setenv("MEMORY_MAX_TURNS", "0")
     s = Settings()
     assert s.resolved_rerank_enabled is True
     assert s.retrieval_min_score == 0.7
+    assert s.retrieval_off_topic_score == 0.6
     assert s.memory_max_turns == 0
