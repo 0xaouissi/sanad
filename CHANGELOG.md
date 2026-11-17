@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Two refusal kinds** — the single "I don't know" reply is split into
+  `off_topic` ("I can only help with questions about this company", no handoff)
+  and `not_covered` ("I couldn't find this in the company's documents", with a
+  "Talk to a human" button). A new lower threshold `RETRIEVAL_OFF_TOPIC_SCORE`
+  (default 0.41, must be ≤ `RETRIEVAL_MIN_SCORE`) separates them; questions
+  that retrieve sources but cannot be answered are treated as company-related.
+  Chat responses and stream `done`/`error` events carry `refusal_kind`; the
+  answer cache key was bumped to `chat:v2:`.
+- **Widget handoff offer** — for `not_covered` refusals an inline "Talk to a
+  human" button opens the handoff form prefilled with the visitor's question.
+  It never submits automatically; the visitor must press Send. The
+  always-visible footer link is unchanged.
+- **Golden evaluation** — grew from 33 to **42 questions** (14 per language)
+  with a new *related-but-not-covered* category (9 cases) scored on whether the
+  handoff is offered; out-of-scope and injection cases now also assert that no
+  handoff is offered. Latest real-model run: 41/42 (see docs/evaluation.md).
+
 ## 0.1.0 — 2026-11-16
 
 First public release. Self-hosted, grounded RAG chatbot: one script tag on any

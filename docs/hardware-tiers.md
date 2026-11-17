@@ -57,7 +57,7 @@ Model name and quantization are both part of the Ollama tag, so `LLM_MODEL`
 changes either. `LLM_NUM_CTX` overrides the tier's context size. Resolution
 order for every value: explicit env override → tier default.
 
-## Reranker per tier (Step 3)
+## Reranker per tier
 
 Hybrid retrieval (dense vectors + keyword full-text, fused with RRF) can be
 sharpened by a cross-encoder reranker, `BAAI/bge-reranker-v2-m3` (~2.3 GB).
@@ -76,7 +76,7 @@ latency. First use downloads the weights into `HF_HOME`:
 huggingface-cli download BAAI/bge-reranker-v2-m3
 ```
 
-## Latency targets (Step 3)
+## Latency targets
 
 Time to first streamed token, measured and logged per request (`chat_latency`
 event with `first_token_ms`, `budget_ms`, `within_budget`):
@@ -109,7 +109,8 @@ The E2E suite asserts the budget on the running tier.
 | `RERANK_MODEL` | `BAAI/bge-reranker-v2-m3` | Cross-encoder reranker |
 | `RERANK_CANDIDATES` | `8` | Hybrid candidates re-scored by the reranker |
 | `RETRIEVAL_TOP_K` | `5` | Chunks passed to the LLM as numbered sources |
-| `RETRIEVAL_MIN_SCORE` | `0.43` | Below this: localized "I don't know" |
+| `RETRIEVAL_MIN_SCORE` | `0.43` | At/above: strong source. Below: related-but-not-covered refusal + handoff |
+| `RETRIEVAL_OFF_TOPIC_SCORE` | `0.41` | Below: off-topic refusal (no handoff). Must be ≤ `RETRIEVAL_MIN_SCORE` |
 | `MEMORY_MAX_TURNS` | `6` | Past messages replayed per conversation (0 = off) |
 
 ## VRAM notes for the small tier (4 GB)
@@ -125,6 +126,6 @@ The E2E suite asserts the budget on the running tier.
 ## No benchmark script — by design
 
 There is no hardware benchmark script. Use the tier defaults above; answer
-quality (accuracy and groundedness per language) is measured later by the
-evaluation page in Step 6, which scores real answers against golden Q&A sets
-in Arabic, French and English.
+quality (accuracy and groundedness per language) is measured by the
+evaluation page, which scores real answers against golden Q&A sets
+in Arabic, French and English ([evaluation.md](evaluation.md)).

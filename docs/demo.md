@@ -17,8 +17,7 @@ Everything stays on your machine; nothing is hosted.
 
 ## Prerequisites
 
-The same live stack as the E2E tests (see *Native development* in the main
-[README](../README.md)):
+The same live stack as the E2E tests (see [development.md](development.md)):
 
 - PostgreSQL with pgvector and the `sanad` database,
 - Ollama running with the small-tier model (`ollama pull qwen2.5:3b-instruct-q4_K_M`),
@@ -92,17 +91,17 @@ Open <http://localhost:8080/demo.html> and click the chat button.
 - The header dropdown forces `ar` / `fr` / `en`; Arabic flips the panel to RTL.
 - Narrow the window below 480 px: the panel becomes full-screen mobile layout.
 - **Talk to a human** opens the handoff form. With no SMTP/Telegram configured
-  it explains what to set; configure `SMTP_*` in `backend/.env` (see the main
-  README, *Human handoff*) and the request lands in the dashboard Handoffs tab
+  it explains what to set; configure `SMTP_*` in `backend/.env` (see
+  [handoff.md](handoff.md)) and the request lands in the dashboard Handoffs tab
   and in your support inbox.
 
 **Dashboard** (<http://127.0.0.1:8000/dashboard/>)
 
 - **Documents** — upload your own PDF/DOCX/TXT/MD, watch the status badge,
   reindex or delete (owner only, behind a confirm dialog).
-- **Evaluation** — run the 33-question golden set (11 per language) against
+- **Evaluation** — run the 42-question golden set (14 per language) against
   the demo documents; per-language and per-category scores, deterministic
-  fact/citation/refusal checks.
+  fact/citation/refusal/handoff checks.
 - **Website** — add a URL to crawl into documents (dev-only
   `CRAWL_ALLOW_PRIVATE=true` lets you crawl a local fixture site).
 - **Failed questions / Ratings / Handoffs** — what visitors asked, rated and

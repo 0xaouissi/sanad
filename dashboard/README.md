@@ -9,12 +9,12 @@ libraries — seven tabs, a small translation dictionary, ~57 kB gzipped.
   each behind a confirm dialog).
 - **Website** — add a URL to crawl into documents, live status badges,
   pages crawled and last sync, sync-now and delete (owner only, delete
-  behind a confirm dialog). See the crawler section in the main README.
+  behind a confirm dialog). See [docs/crawling.md](../docs/crawling.md).
 - **Failed questions** — questions the bot refused, with language and date.
 - **Ratings** — visitor thumbs up/down with the question and answer.
 - **Handoffs** — visitors' requests to talk to a human: email, message,
   language, per-channel delivery badges and date (read-only for everyone).
-- **Evaluation** — run the 33-question golden set (11 per language) against
+- **Evaluation** — run the 42-question golden set (14 per language) against
   the company's documents; live progress, per-language and per-category
   scores, and each case with its failed checks. Owner-only run button;
   warns when the demo documents from `samples/` are missing.
@@ -37,7 +37,8 @@ npm install
 npm run dev        # http://localhost:5173/dashboard/ (proxies /api to :8000)
 ```
 
-The backend must be running on `127.0.0.1:8000` (see the main README).
+The backend must be running on `127.0.0.1:8000` (see
+[docs/development.md](../docs/development.md)).
 
 ## Build for production
 

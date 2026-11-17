@@ -13,6 +13,5 @@ allowed domains; the secret `sk-…` key never belongs in a page.
 Configuration attributes (`data-api-url`, `data-color`, `data-logo`,
 `data-welcome`, `data-lang`, `data-theme`), the site-key threat model, the
 `textContent`-only rendering guarantee, the handoff form and the real-browser
-tests are documented in the main README:
-[The embeddable widget](../README.md#the-embeddable-widget-step-4).
+tests are documented in [docs/widget.md](../docs/widget.md).
 A runnable demo page and recorded GIFs: [../docs/demo.md](../docs/demo.md).

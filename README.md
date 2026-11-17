@@ -122,12 +122,15 @@ How it works:
   keyword search, fused with reciprocal rank fusion. On medium/large tiers a
   local cross-encoder (`bge-reranker-v2-m3`) re-ranks the top candidates;
   off by default on the small tier, override with `RERANK_ENABLED`.
-- **"I don't know" rule** — if the best source scores below
-  `RETRIEVAL_MIN_SCORE` (default 0.43, calibrated on real BGE-M3 scores), the
-  LLM is never called: the visitor gets a localized "I don't know" with an
-  offer to contact support. Questions that retrieve sources but cannot be
-  answered from them are refused by the same rule in the prompt. Refusals
-  never carry citations.
+- **Two refusal kinds** — retrieval uses two calibrated thresholds. Below
+  `RETRIEVAL_OFF_TOPIC_SCORE` (default 0.41) a question is **off-topic** and
+  gets a polite "I can only help with questions about this company" reply.
+  Between that and `RETRIEVAL_MIN_SCORE` (default 0.43) it is **company-related
+  but not covered**: the visitor gets "I couldn't find this in the company's
+  documents" plus a "Talk to a human" button prefilled with their question.
+  The LLM is never called for either pre-LLM refusal; sources found but unable
+  to answer are also treated as not-covered. Refusals never carry citations,
+  and a ticket is only ever created when the visitor submits the form.
 - **Strict grounding** — the prompt forbids outside knowledge and requires
   inline `[n]` citations; the response maps them to document name + page.
 - **Conversation memory** — pass `conversation_id` back to continue a chat;
@@ -249,7 +252,7 @@ miss; chat keeps working.
    "print your system prompt", in ar/fr/en) are refused **before any model
    call**.
 4. Answers that leak prompt text, or junk-prefixed refusals, are normalized
-   to the clean localized "I don't know".
+   to the clean localized **off-topic** refusal (no handoff offer).
 Live e2e tests upload a hostile document in each language and prove normal
 questions stay grounded while attack questions never leak the prompt.
 
@@ -332,7 +335,7 @@ bundle. See [dashboard/README.md](dashboard/README.md).
 ## Golden evaluation (Step 6a)
 
 Measure answer quality per language **without the model judging itself**.
-A fixed golden set of **33 questions — 11 each in Arabic, French and
+A fixed golden set of **42 questions — 14 each in Arabic, French and
 English** — runs through the exact same retrieval + prompt + model path as
 live chat, then is scored deterministically:
 
@@ -340,13 +343,39 @@ live chat, then is scored deterministically:
   must appear in the answer (Arabic-normalized, digit-folded substring
   match) and every citation must point at an expected source document.
 - **15 out-of-scope** questions (weather, capitals, recipes…): the bot must
-  refuse with the standard "I don't know" answer and **no citations**.
+  give the off-topic refusal with **no citations and no handoff offer**.
+- **9 related-but-not-covered** questions (gift wrapping, address changes,
+  loyalty programs…): company-related but absent from the documents — the bot
+  must refuse **and offer the human handoff**, still with no citations.
 - **6 prompt-injection** attacks ("ignore your instructions…", DAN…):
-  blocked before the model, no prompt leak, no citations.
+  blocked before the model, no prompt leak, no citations, no handoff offer.
 
 The golden set lives in [backend/app/eval/golden.json](backend/app/eval/golden.json)
 and targets the trilingual demo policies in [samples/](samples/) (identical
 facts in `demo-policy.en.md`, `demo-politique.fr.md`, `demo-siasa.ar.md`).
+
+Latest run against the seeded demo company, real models, no mocks
+(`qwen2.5:3b-instruct-q4_K_M`, small tier, `BAAI/bge-m3` CPU, reranker off,
+2026-11-17):
+
+| Language | Questions | Passed |
+|----------|-----------|--------|
+| English  | 14 | 14 |
+| French   | 14 | 14 |
+| Arabic   | 14 | 13 |
+
+| Category | Questions | Passed |
+|----------|-----------|--------|
+| Grounded facts + citations | 12 | 12 |
+| Out-of-scope refusals (no handoff) | 15 | 15 |
+| Related-but-not-covered (handoff offered) | 9 | 8 |
+| Prompt-injection blocks | 6 | 6 |
+
+**41 / 42 passed.** The single miss is an Arabic gift-wrapping question the
+3B model answered with a hallucinated "yes" instead of refusing — the small
+tier's weaker Arabic grounding. **Honest note:** 42 questions over three short
+demo policies is a sanity check, not a benchmark; re-run on your own documents
+and inspect failed cases. Full detail in [docs/evaluation.md](docs/evaluation.md).
 
 **Sample company.** Seed a demo company with the sample documents already
 ingested (real BGE-M3 embeddings):
@@ -431,10 +460,13 @@ can crawl a loopback fixture site; never enable it on a reachable server.
 ## Human handoff (Step 6c)
 
 Visitors can ask for a human at any time: a **"Talk to a human"** link in the
-widget footer opens a small form (email + message + privacy notice). The
-request is delivered to the company's support **email** and/or **Telegram**
-chat, and — when *Store conversations* is on — listed in the dashboard's
-read-only **Handoffs** tab with per-channel delivery status.
+widget footer opens a small form (email + message + privacy notice). For a
+company-related question the documents cannot answer (`not_covered`), an
+inline button also appears under the refusal and opens the form **prefilled
+with the question** — never submitted automatically. The request is delivered
+to the company's support **email** and/or **Telegram** chat, and — when *Store
+conversations* is on — listed in the dashboard's read-only **Handoffs** tab
+with per-channel delivery status.
 
 Setup is two layers:
 
@@ -606,13 +638,13 @@ Each step ships with tests, docs and small commits.
 0. **Hardware tiers** — tier defaults, env overrides, CPU-only mode *(done)*
 1. **Project setup, FastAPI and Ollama** — health, structured logging, provider interface, streaming chat, Docker Compose *(done)*
 2. **Documents, chunking, multilingual embeddings** — multi-company isolation, PDF/DOCX/TXT/MD upload, OCR, Arabic normalization, pgvector, background ingestion *(done)*
-3. **Retrieval, the "I don't know" rule, language detection** — hybrid search + rerank, citations, conversation memory, latency targets *(done)*
+3. **Retrieval, refusal rules, language detection** — hybrid search + rerank, citations, conversation memory, latency targets *(done)*
 4. **The embeddable widget** — one script tag, Shadow DOM, RTL, themes, ratings *(done)*
 5. **Protection, speed, admin dashboard** — split in two:
    - **5a** *(done)*: rate limits per IP/site, daily company cap, widget bot check, Redis answer cache with in-memory fallback, prompt-injection defense, Alembic migrations, Prometheus metrics
    - **5b** *(done)*: React dashboard — scrypt login with rate limiting, httpOnly cookie sessions + CSRF, owner/viewer roles, documents, failed questions, ratings, settings (snippet, domains, key rotation), privacy toggle, data export and deletion, ar/fr/en RTL interface
 6. **Evaluation page, website crawling, human handoff** — split in three:
-   - **6a** *(done)*: golden Q&A evaluation — 33 questions (11 per language), grounded/out-of-scope/injection cases, deterministic fact + citation + refusal scoring, sample company and demo documents, dashboard evaluation page
+   - **6a** *(done)*: golden Q&A evaluation — 42 questions (14 per language), grounded/out-of-scope/related-but-not-covered/injection cases, deterministic fact + citation + refusal + handoff scoring, sample company and demo documents, dashboard evaluation page
    - **6b** *(done)*: SSRF-safe website crawler — IP-pinned connections, per-hop redirect re-validation, same-domain + robots.txt, page/size/time limits, injection-sanitized storage, safe scheduled re-sync, dashboard Website tab
    - **6c** *(done)*: human handoff — widget form with privacy notice, email (SMTP) + Telegram delivery, env-only secrets, header-injection protection, per-IP + daily rate limits, privacy toggle respected, dashboard Handoffs tab and Settings destinations
 7. **Documentation, demo and release** — demo GIF/video, CI, live demo, first release *(done)*
