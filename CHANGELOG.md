@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.1 — 2026-11-17
+
+A dashboard visual redesign and a build-tooling security bump. No backend,
+widget, API or schema changes.
+
+### Changed
+
+- **Dashboard redesign** — the dashboard stylesheet was rewritten as a
+  tokenized design system: neutral surfaces with the blue accent kept, a
+  refined type scale, spacing/radius/shadow tokens, a sticky blurred header
+  with a brand mark, a pill segmented tab bar, elevated panels, focus rings
+  on inputs, hover/active/disabled button states, uppercase table headers
+  with row hover, and tinted status badges. Uses CSS logical properties so
+  the Arabic RTL layout mirrors correctly, plus a responsive mobile layout.
+  CSS-only — no React logic, selectors or behaviour changed; all 8 dashboard
+  browser tests still pass.
+
+### Security
+
+- **Dashboard build tooling** — bumped Vite from 5.4.21 to 6.4.6, which
+  resolves its transitive esbuild to 0.25.12. This clears the 9 open
+  Dependabot alerts (8 in Vite, 1 in esbuild). These are build-time dev
+  dependencies and are not shipped in the static bundle. Note: Vite ≥ 6.3
+  pulls a transitive `picomatch` with an open ReDoS advisory that has no
+  upstream fix yet (`picomatch ≤ 4.0.7`); it is dev-only, does not affect the
+  production bundle, and GitHub raised no Dependabot alert for it.
+
+### Tests
+
+Dashboard build clean (tsc + Vite 6.4.6) and all 8 dashboard browser tests
+pass on the redesigned UI and the bumped toolchain. Backend is unchanged from
+0.2.0 (443 unit / 193 integration / 30 live API e2e / 23 browser).
+
 ## 0.2.0 — 2026-11-17
 
 Repository polish, a clearer refusal split, and a new Apache-2.0 small-tier
