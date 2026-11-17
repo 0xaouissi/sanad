@@ -53,6 +53,33 @@ The demo password is public — change it before any real use.
   httpOnly cookie sessions + CSRF, hashed API keys, Alembic migrations,
   Prometheus metrics.
 
+## Download
+
+Sanad is source you self-host — there is no installer or prebuilt binary. The
+Docker image is built from this repo, so you always run the code you download.
+
+```bash
+# Latest development snapshot
+git clone https://github.com/0xaouissi/sanad.git
+cd sanad
+
+# A specific tagged release (recommended for production)
+git clone --branch v0.2.1 --depth 1 https://github.com/0xaouissi/sanad.git
+```
+
+Prefer a plain archive? Download the source for any release from the
+[Releases page](https://github.com/0xaouissi/sanad/releases) — GitHub provides
+`sanad-<tag>.zip` and `sanad-<tag>.tar.gz` for every tag, or grab the current
+main as a zip:
+
+```bash
+curl -L -o sanad.zip https://github.com/0xaouissi/sanad/archive/refs/heads/main.zip
+unzip sanad.zip && cd sanad-main
+```
+
+Then continue with **Quick start** below (Docker) or the native setup in
+[docs/development.md](docs/development.md).
+
 ## Quick start
 
 ```bash
