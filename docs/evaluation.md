@@ -134,6 +134,69 @@ refusing. A larger tier and/or the reranker reduce these. The held-out set
 exists to surface exactly this gap between the calibration corpus and unseen
 questions — 27/30 here versus 41/42 on the golden set is the honest picture.
 
+## Model comparison: an Apache-2.0 small-tier candidate
+
+The small-tier default `qwen2.5:3b-instruct-q4_K_M` is **research-licensed**
+(see [models.md](models.md)). To find a commercially-licensed replacement at
+the same tier, the non-thinking **`qwen3:4b-instruct-2507-q4_K_M`**
+(Qwen3-4B-Instruct-2507, **Apache-2.0**) was evaluated on the identical golden
+and held-out sets — same demo documents, same thresholds, reranker off, same
+host. Both models were re-run in one session for a fair comparison
+(2026-11-17). The default was **not** changed.
+
+| Set | Language | `qwen2.5:3b` (research) | `qwen3:4b-instruct-2507` (Apache-2.0) |
+|-----|----------|-------------------------|----------------------------------------|
+| Golden (42) | English | 14 / 14 | 14 / 14 |
+| Golden | French | 14 / 14 | 14 / 14 |
+| Golden | Arabic | 13 / 14 | 14 / 14 |
+| **Golden total** | | **41 / 42** | **42 / 42** |
+| Held-out (30) | English | 8 / 10 | 10 / 10 |
+| Held-out | French | 10 / 10 | 10 / 10 |
+| Held-out | Arabic | 9 / 10 | 10 / 10 |
+| **Held-out total** | | **27 / 30** | **30 / 30** |
+
+Instruct-2507 fixed every 3B miss: the `ar-nc-giftwrap` hallucination on the
+golden set, and all three held-out misses (`ho-en-refund-dest` over-refusal,
+`ho-en-nc-return-cost` paraphrased refusal, `ho-ar-nc-return-cost` source
+recitation). It refused correctly, offered the handoff only when it should,
+cited correctly and stayed in-language on every case.
+
+**Latency (same host, warm, GTX 1650 partial offload):** a grounded answer took
+~0.7 s on the 3B and ~1.4 s on Instruct-2507 — both far inside the 120 s
+`LLM_TIMEOUT`. The 42-case golden run took ~61 s (3B) vs ~87 s (Instruct-2507)
+wall-clock. The 4B model is modestly slower per answer but the same order of
+magnitude; it needs ~2.5 GB of weights vs ~1.9 GB for the 3B.
+
+**Why not the hybrid `qwen3:4b`?** The plain `qwen3:4b` tag is a *hybrid
+thinking* model: it always emits reasoning tokens. On this CPU-class host a
+single grounded answer **exceeded the 120 s timeout**, and Ollama 0.40.16's
+`think:false` only disables the reasoning *parser* — it leaks the reasoning
+inline into `content` rather than suppressing it (the `LLM_THINK` setting
+forwards this parameter and is left unset by default). **Instruct-2507** is the
+official *non-thinking* release of the same 4B model, so it answers directly
+with no reasoning traces. That is the practical "qwen3:4b with thinking
+disabled" candidate.
+
+**Reading:** on this small demo corpus the Apache-2.0 Instruct-2507 is both
+commercially usable *and* more accurate than the research-licensed 3B, at
+similar latency — a strong candidate for the small-tier default. The same
+honest caveat applies: 42 + 30 questions over three short policies is a sanity
+check, not a benchmark. Re-run on your own corpus before deciding. The default
+remains `qwen2.5:3b-instruct-q4_K_M` pending an explicit decision.
+
+Run the comparison yourself (demo seeded, Ollama up, from the repo root):
+
+```bash
+# baseline (default 3B)
+PYTHONIOENCODING=utf-8 backend/.venv/Scripts/python.exe scripts/run_golden.py
+PYTHONIOENCODING=utf-8 backend/.venv/Scripts/python.exe scripts/run_heldout.py
+# Apache-2.0 non-thinking candidate
+LLM_MODEL=qwen3:4b-instruct-2507-q4_K_M PYTHONIOENCODING=utf-8 \
+  backend/.venv/Scripts/python.exe scripts/run_golden.py
+LLM_MODEL=qwen3:4b-instruct-2507-q4_K_M PYTHONIOENCODING=utf-8 \
+  backend/.venv/Scripts/python.exe scripts/run_heldout.py
+```
+
 ## Re-tuning the thresholds on your own documents
 
 The defaults (0.43 / 0.41) fit the demo policies, not your corpus. To re-tune:
